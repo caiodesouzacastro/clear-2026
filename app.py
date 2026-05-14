@@ -24,7 +24,24 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Sem CSS custom — confia no tema claro do .streamlit/config.toml
+# Tema claro FGV injetado direto (não depende de config.toml externo)
+st.markdown("""
+<style>
+    .stApp, .main, .block-container { background-color: #FFFFFF !important; }
+    [data-testid="stSidebar"], [data-testid="stSidebar"] > div { background-color: #F8FAFC !important; }
+    .stApp, .stApp * { color: #1E293B; }
+    h1, h2, h3, h4 { color: #002B5C !important; }
+    [data-testid="stMetricValue"] { color: #002B5C !important; font-weight: 700; }
+    [data-testid="stMetricLabel"] { color: #475569 !important; }
+    [data-baseweb="tag"] { background-color: #DBEAFE !important; color: #002B5C !important; }
+    [data-baseweb="select"] > div, [data-baseweb="input"] > div { background-color: #FFFFFF !important; }
+    .stRadio label { color: #1E293B !important; }
+    section[data-testid="stSidebar"] .stMarkdown { color: #1E293B !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# Template Plotly em tema claro (aplicado em todos os gráficos)
+PLOTLY_TEMPLATE = "plotly_white"
 
 MASTER_FILE = Path(__file__).parent / "CLEAR_Master_2026.xlsx"
 
@@ -147,7 +164,7 @@ def view_portfolio(df_at, data_min, data_max):
             labels={"mes_ref": "Mês", "projeto": "", "qtd": "Atividades"},
         )
         fig.update_xaxes(dtick="M1", tickformat="%b/%y")
-        fig.update_layout(height=380, margin=dict(t=20, b=20))
+        fig.update_layout(template=PLOTLY_TEMPLATE, height=380, margin=dict(t=20, b=20))
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Sem atividades com data no filtro atual.")
@@ -175,7 +192,7 @@ def view_portfolio(df_at, data_min, data_max):
                     "atividade_curta": False,
                 },
             )
-            fig.update_layout(height=460, margin=dict(t=20, b=20))
+            fig.update_layout(template=PLOTLY_TEMPLATE, height=460, margin=dict(t=20, b=20))
             hoje_ts = pd.Timestamp(date.today())
             fig.add_shape(
                 type="line", x0=hoje_ts, x1=hoje_ts, y0=0, y1=1, yref="paper",
@@ -308,7 +325,7 @@ def view_pesquisador(df_resp, df_alocacao, df_pessoas, data_min, data_max):
                 "atividade_curta": False,
             },
         )
-        fig.update_layout(height=360, margin=dict(t=20, b=20))
+        fig.update_layout(template=PLOTLY_TEMPLATE, height=360, margin=dict(t=20, b=20))
         hoje_ts = pd.Timestamp(date.today())
         fig.add_shape(
             type="line", x0=hoje_ts, x1=hoje_ts, y0=0, y1=1, yref="paper",
@@ -431,12 +448,21 @@ def main():
 
     df_at_f, df_resp_f, data_min, data_max, projs = aplicar_filtros_globais(df_at, df_resp)
 
-    tab1, tab2, tab3 = st.tabs(["📊 Portfólio", "👤 Pesquisador", "📅 Próximas Entregas"])
-    with tab1:
+    # Lazy load: só roda a vista selecionada (em vez de st.tabs que carrega todas)
+    with st.sidebar:
+        st.markdown("---")
+        st.subheader("Visão")
+        view = st.radio(
+            "Visão",
+            ["📊 Portfólio", "👤 Pesquisador", "📅 Próximas Entregas"],
+            label_visibility="collapsed",
+        )
+
+    if view == "📊 Portfólio":
         view_portfolio(df_at_f, data_min, data_max)
-    with tab2:
+    elif view == "👤 Pesquisador":
         view_pesquisador(df_resp_f, df_alocacao, df_pessoas, data_min, data_max)
-    with tab3:
+    else:
         view_linha_chegada(df_at_f, data_min, data_max)
 
     st.markdown("---")
