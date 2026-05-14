@@ -24,40 +24,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# CSS customizado para garantir tema claro e estilo FGV
-st.markdown("""
-<style>
-    /* Forçar tema claro */
-    .stApp { background-color: #FFFFFF; color: #1E293B; }
-    [data-testid="stSidebar"] { background-color: #F8FAFC; }
-    
-    /* Títulos em azul FGV */
-    h1, h2, h3 { color: #002B5C !important; }
-    
-    /* Métricas */
-    [data-testid="stMetricValue"] { color: #002B5C; font-weight: 700; }
-    [data-testid="stMetricLabel"] { color: #475569; }
-    
-    /* Abas */
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #F1F5F9;
-        border-radius: 6px 6px 0 0;
-        padding: 8px 16px;
-        color: #475569;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #0033A0 !important;
-        color: white !important;
-    }
-    
-    /* Botão de filtros */
-    .stRadio > label, .stMultiSelect > label, .stSelectbox > label {
-        color: #002B5C;
-        font-weight: 600;
-    }
-</style>
-""", unsafe_allow_html=True)
+# Sem CSS custom — confia no tema claro do .streamlit/config.toml
 
 MASTER_FILE = Path(__file__).parent / "CLEAR_Master_2026.xlsx"
 
@@ -133,7 +100,7 @@ def aplicar_filtros_globais(df_at, df_resp):
         status_selecionados = st.multiselect(
             "Selecione",
             options=status_disp,
-            default=[s for s in status_disp if s != "Concluído"],
+            default=[s for s in status_disp if s not in ("Concluído", "Reunião")],
             label_visibility="collapsed",
         )
 
@@ -176,7 +143,7 @@ def view_portfolio(df_at, data_min, data_max):
             x="mes_ref",
             y="projeto",
             z="qtd",
-            color_continuous_scale=[[0, "#FFFFFF"], [0.3, "#BFDBFE"], [0.6, "#3B82F6"], [1.0, "#002B5C"]],
+            color_continuous_scale=[[0, "#E0E7FF"], [0.5, "#3B82F6"], [1.0, "#001F4D"]],
             labels={"mes_ref": "Mês", "projeto": "", "qtd": "Atividades"},
         )
         fig.update_xaxes(dtick="M1", tickformat="%b/%y")
@@ -185,42 +152,42 @@ def view_portfolio(df_at, data_min, data_max):
     else:
         st.info("Sem atividades com data no filtro atual.")
 
-    st.subheader("Timeline de atividades no período")
-    st.caption("Cada ponto é uma atividade. Maior = entregável crítico. Linha vermelha = hoje.")
-    if not no_periodo.empty:
-        no_periodo = no_periodo.copy()
-        no_periodo["tamanho"] = no_periodo["eh_entregavel"].map({True: 18, False: 8})
-        no_periodo["atividade_curta"] = no_periodo["atividade"].str[:90]
-        fig = px.scatter(
-            no_periodo,
-            x="prazo",
-            y="projeto",
-            color="status",
-            color_discrete_map=CORES_STATUS,
-            size="tamanho",
-            size_max=18,
-            hover_name="atividade_curta",
-            hover_data={
-                "responsaveis": True,
-                "sub_projeto": True,
-                "prazo": "|%d/%m/%Y",
-                "tamanho": False,
-                "atividade_curta": False,
-            },
-        )
-        fig.update_layout(height=460, margin=dict(t=20, b=20))
-        hoje_ts = pd.Timestamp(date.today())
-        fig.add_shape(
-            type="line", x0=hoje_ts, x1=hoje_ts, y0=0, y1=1, yref="paper",
-            line=dict(color="#001F4D", width=2, dash="dash"),
-        )
-        fig.add_annotation(
-            x=hoje_ts, y=1, yref="paper", text="hoje", showarrow=False,
-            font=dict(color="#001F4D"), yshift=10,
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Sem atividades no período filtrado.")
+    with st.expander("📅 Ver timeline detalhada de atividades", expanded=False):
+        st.caption("Cada ponto é uma atividade. Maior = entregável crítico. A linha indica hoje.")
+        if not no_periodo.empty:
+            no_periodo = no_periodo.copy()
+            no_periodo["tamanho"] = no_periodo["eh_entregavel"].map({True: 18, False: 8})
+            no_periodo["atividade_curta"] = no_periodo["atividade"].str[:90]
+            fig = px.scatter(
+                no_periodo,
+                x="prazo",
+                y="projeto",
+                color="status",
+                color_discrete_map=CORES_STATUS,
+                size="tamanho",
+                size_max=18,
+                hover_name="atividade_curta",
+                hover_data={
+                    "responsaveis": True,
+                    "sub_projeto": True,
+                    "prazo": "|%d/%m/%Y",
+                    "tamanho": False,
+                    "atividade_curta": False,
+                },
+            )
+            fig.update_layout(height=460, margin=dict(t=20, b=20))
+            hoje_ts = pd.Timestamp(date.today())
+            fig.add_shape(
+                type="line", x0=hoje_ts, x1=hoje_ts, y0=0, y1=1, yref="paper",
+                line=dict(color="#001F4D", width=2, dash="dash"),
+            )
+            fig.add_annotation(
+                x=hoje_ts, y=1, yref="paper", text="hoje", showarrow=False,
+                font=dict(color="#001F4D"), yshift=10,
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Sem atividades no período filtrado.")
 
     st.subheader("📌 Próximos entregáveis no período")
     entregaveis = no_periodo[no_periodo["eh_entregavel"]].sort_values("prazo")
