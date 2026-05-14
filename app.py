@@ -62,19 +62,21 @@ st.markdown("""
 MASTER_FILE = Path(__file__).parent / "CLEAR_Master_2026.xlsx"
 
 CORES_STATUS = {
-    "Concluído": "#1F7A3D",      # verde sóbrio
+    "Concluído": "#94A3B8",      # cinza-azulado claro (já feito, baixa atenção)
     "Em Andamento": "#0033A0",   # azul FGV
-    "Não Iniciado": "#6B7280",   # cinza médio
-    "Atrasado": "#B91C1C",       # vermelho escuro
-    "Reunião": "#6B21A8",        # roxo sóbrio
+    "Não Iniciado": "#CBD5E1",   # cinza-azul muito claro
+    "Atrasado": "#001F4D",       # azul-marinho quase preto (alerta, mas no eixo azul)
+    "Reunião": "#3B82F6",        # azul médio
 }
 
-# Paleta FGV
-COR_PRIMARIA = "#0033A0"     # azul FGV
+# Paleta FGV — toda em tons de azul
+COR_PRIMARIA = "#0033A0"         # azul FGV
 COR_PRIMARIA_ESCURA = "#002B5C"  # azul FGV escuro
-COR_SECUNDARIA = "#475569"   # cinza escuro
-COR_FUNDO_CARD = "#F8FAFC"   # cinza muito claro
-COR_BORDA = "#E2E8F0"        # cinza claro
+COR_ALERTA = "#001F4D"           # azul-marinho profundo (substitui vermelho)
+COR_ATENCAO = "#3B82F6"          # azul médio (substitui laranja)
+COR_SECUNDARIA = "#475569"       # cinza escuro
+COR_FUNDO_CARD = "#F8FAFC"       # cinza muito claro
+COR_BORDA = "#E2E8F0"            # cinza claro
 
 
 @st.cache_data(show_spinner="Carregando planilha mestra...")
@@ -210,11 +212,11 @@ def view_portfolio(df_at, data_min, data_max):
         hoje_ts = pd.Timestamp(date.today())
         fig.add_shape(
             type="line", x0=hoje_ts, x1=hoje_ts, y0=0, y1=1, yref="paper",
-            line=dict(color="red", width=2, dash="dash"),
+            line=dict(color="#001F4D", width=2, dash="dash"),
         )
         fig.add_annotation(
             x=hoje_ts, y=1, yref="paper", text="hoje", showarrow=False,
-            font=dict(color="red"), yshift=10,
+            font=dict(color="#001F4D"), yshift=10,
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -275,10 +277,10 @@ def view_pesquisador(df_resp, df_alocacao, df_pessoas, data_min, data_max):
 
         def cor_n_projetos(n):
             if n >= 8:
-                return "#B91C1C"
+                return "#001F4D"   # azul-marinho profundo — pulverização crítica
             if n >= 6:
-                return "#D97706"
-            return "#0033A0"
+                return "#0033A0"   # azul FGV — atenção
+            return "#93C5FD"        # azul claro — normal
 
         cores = [cor_n_projetos(n) for n in aloc_pessoa["n_projetos_no_mes"]]
         fig = go.Figure()
@@ -301,13 +303,13 @@ def view_pesquisador(df_resp, df_alocacao, df_pessoas, data_min, data_max):
         )
         # Linhas de referência sem add_hline (compatibilidade Plotly 6.7)
         fig.add_shape(type="line", x0=-0.5, x1=len(aloc_pessoa)-0.5, y0=8, y1=8,
-                      line=dict(color="red", width=1, dash="dash"))
+                      line=dict(color="#001F4D", width=1, dash="dash"))
         fig.add_annotation(x=len(aloc_pessoa)-1, y=8, text="muito pulverizado",
-                           showarrow=False, font=dict(color="red", size=10), yshift=10, xanchor="right")
+                           showarrow=False, font=dict(color="#001F4D", size=10), yshift=10, xanchor="right")
         fig.add_shape(type="line", x0=-0.5, x1=len(aloc_pessoa)-0.5, y0=6, y1=6,
-                      line=dict(color="orange", width=1, dash="dot"))
+                      line=dict(color="#0033A0", width=1, dash="dot"))
         fig.add_annotation(x=len(aloc_pessoa)-1, y=6, text="atenção",
-                           showarrow=False, font=dict(color="orange", size=10), yshift=10, xanchor="right")
+                           showarrow=False, font=dict(color="#0033A0", size=10), yshift=10, xanchor="right")
         st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
@@ -343,11 +345,11 @@ def view_pesquisador(df_resp, df_alocacao, df_pessoas, data_min, data_max):
         hoje_ts = pd.Timestamp(date.today())
         fig.add_shape(
             type="line", x0=hoje_ts, x1=hoje_ts, y0=0, y1=1, yref="paper",
-            line=dict(color="red", width=2, dash="dash"),
+            line=dict(color="#001F4D", width=2, dash="dash"),
         )
         fig.add_annotation(
             x=hoje_ts, y=1, yref="paper", text="hoje", showarrow=False,
-            font=dict(color="red"), yshift=10,
+            font=dict(color="#001F4D"), yshift=10,
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -374,8 +376,8 @@ def view_pesquisador(df_resp, df_alocacao, df_pessoas, data_min, data_max):
 
 
 def view_linha_chegada(df_at, data_min, data_max):
-    st.header("🏁 Linha de Chegada")
-    st.caption("Calendário de entregas críticas — o que precisa ficar pronto e quando.")
+    st.header("📅 Próximas Entregas")
+    st.caption("O que precisa ficar pronto nas próximas semanas, agrupado por urgência.")
 
     entregaveis = df_at[df_at["eh_entregavel"] & df_at["prazo"].notna()].copy()
     entregaveis_periodo = entregaveis[
@@ -462,7 +464,7 @@ def main():
 
     df_at_f, df_resp_f, data_min, data_max, projs = aplicar_filtros_globais(df_at, df_resp)
 
-    tab1, tab2, tab3 = st.tabs(["📊 Portfólio", "👤 Pesquisador", "🏁 Linha de Chegada"])
+    tab1, tab2, tab3 = st.tabs(["📊 Portfólio", "👤 Pesquisador", "📅 Próximas Entregas"])
     with tab1:
         view_portfolio(df_at_f, data_min, data_max)
     with tab2:
