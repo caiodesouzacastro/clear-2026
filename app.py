@@ -1,10 +1,6 @@
 """
 CLEAR 2026 — Dashboard de Organização e Alocação
 FGV CLEAR
-
-Rodar localmente:
-    pip install -r requirements.txt
-    streamlit run app.py
 """
 
 import streamlit as st
@@ -14,79 +10,94 @@ import plotly.graph_objects as go
 from datetime import date
 from pathlib import Path
 
-# ============================================================
-# Configuração
-# ============================================================
 st.set_page_config(
-    page_title="CLEAR 2026 — Organização",
+    page_title="CLEAR 2026",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# Tema claro FGV injetado direto (não depende de config.toml externo)
-st.markdown("""
+MASTER_FILE = Path(__file__).parent / "CLEAR_Master_2026.xlsx"
+
+# Paleta Bloomberg dark
+BG = "#0A1929"
+BG_CARD = "#132F4C"
+BG_HOVER = "#1E3A5F"
+TEXTO = "#FFFFFF"
+TEXTO_DIM = "#B2BAC2"
+TEXTO_DIM2 = "#6F7E8C"
+BORDA = "#1E3A5F"
+AZUL = "#5090D3"
+AZUL_CLARO = "#7BB3F0"
+AZUL_ESCURO = "#1E3A5F"
+
+CORES_STATUS = {
+    "Concluído": "#6F7E8C",
+    "Em Andamento": "#5090D3",
+    "Não Iniciado": "#3A5169",
+    "Atrasado": "#7BB3F0",
+    "Reunião": "#4A6FA5",
+}
+
+st.markdown(f"""
 <style>
-    .stApp, .main, .block-container { background-color: #FFFFFF !important; }
-    [data-testid="stSidebar"], [data-testid="stSidebar"] > div { background-color: #F8FAFC !important; }
-    .stApp, .stApp * { color: #1E293B; }
-    h1, h2, h3, h4 { color: #002B5C !important; }
-    [data-testid="stMetricValue"] { color: #002B5C !important; font-weight: 700; }
-    [data-testid="stMetricLabel"] { color: #475569 !important; }
-    [data-baseweb="tag"] { background-color: #DBEAFE !important; color: #002B5C !important; }
-    [data-baseweb="select"] > div, [data-baseweb="input"] > div { background-color: #FFFFFF !important; }
-    .stRadio label { color: #1E293B !important; }
-    section[data-testid="stSidebar"] .stMarkdown { color: #1E293B !important; }
+    .stApp {{ background-color: {BG}; }}
+    .main, .block-container {{ background-color: {BG}; color: {TEXTO}; }}
+    [data-testid="stSidebar"] {{ background-color: {BG_CARD}; }}
+    [data-testid="stSidebar"] > div {{ background-color: {BG_CARD}; }}
+    h1, h2, h3, h4, h5, h6 {{ color: {TEXTO} !important; font-weight: 600; }}
+    p, span, label, div {{ color: {TEXTO}; }}
+    [data-testid="stMetricValue"] {{ color: {TEXTO} !important; font-weight: 700; font-size: 2.2rem; }}
+    [data-testid="stMetricLabel"] {{ color: {TEXTO_DIM} !important; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }}
+    .stTabs [data-baseweb="tab-list"] {{ gap: 4px; background-color: {BG}; border-bottom: 1px solid {BORDA}; }}
+    .stTabs [data-baseweb="tab"] {{ background-color: transparent; color: {TEXTO_DIM}; padding: 10px 20px; border-radius: 0; border-bottom: 2px solid transparent; }}
+    .stTabs [aria-selected="true"] {{ background-color: transparent !important; color: {AZUL} !important; border-bottom: 2px solid {AZUL} !important; font-weight: 600; }}
+    [data-baseweb="tag"] {{ background-color: {BG_HOVER} !important; color: {TEXTO} !important; }}
+    [data-baseweb="select"] > div {{ background-color: {BG_CARD} !important; border-color: {BORDA} !important; }}
+    [data-baseweb="input"] > div {{ background-color: {BG_CARD} !important; }}
+    [data-testid="stDataFrame"] {{ background-color: {BG_CARD}; }}
+    [data-testid="stExpander"] {{ background-color: {BG_CARD}; border: 1px solid {BORDA}; border-radius: 4px; }}
+    hr {{ border-color: {BORDA}; }}
+    header[data-testid="stHeader"] {{ background-color: {BG}; }}
 </style>
 """, unsafe_allow_html=True)
 
-# Template Plotly em tema claro (aplicado em todos os gráficos)
-PLOTLY_TEMPLATE = "plotly_white"
 
-MASTER_FILE = Path(__file__).parent / "CLEAR_Master_2026.xlsx"
-
-CORES_STATUS = {
-    "Concluído": "#94A3B8",      # cinza-azulado claro (já feito, baixa atenção)
-    "Em Andamento": "#0033A0",   # azul FGV
-    "Não Iniciado": "#CBD5E1",   # cinza-azul muito claro
-    "Atrasado": "#001F4D",       # azul-marinho quase preto (alerta, mas no eixo azul)
-    "Reunião": "#3B82F6",        # azul médio
-}
-
-# Paleta FGV — toda em tons de azul
-COR_PRIMARIA = "#0033A0"         # azul FGV
-COR_PRIMARIA_ESCURA = "#002B5C"  # azul FGV escuro
-COR_ALERTA = "#001F4D"           # azul-marinho profundo (substitui vermelho)
-COR_ATENCAO = "#3B82F6"          # azul médio (substitui laranja)
-COR_SECUNDARIA = "#475569"       # cinza escuro
-COR_FUNDO_CARD = "#F8FAFC"       # cinza muito claro
-COR_BORDA = "#E2E8F0"            # cinza claro
-
-
-@st.cache_data(show_spinner="Carregando planilha mestra...")
+@st.cache_data(show_spinner="Carregando...")
 def carregar_dados():
     atividades = pd.read_excel(MASTER_FILE, sheet_name="Atividades")
     resp = pd.read_excel(MASTER_FILE, sheet_name="Resp_Atividade")
     alocacao = pd.read_excel(MASTER_FILE, sheet_name="Alocacao")
-    envolvimento = pd.read_excel(MASTER_FILE, sheet_name="Envolvimento")
     pessoas = pd.read_excel(MASTER_FILE, sheet_name="Pessoas")
-    projetos = pd.read_excel(MASTER_FILE, sheet_name="Projetos")
-
     atividades["prazo"] = pd.to_datetime(atividades["prazo"], errors="coerce")
     resp["prazo"] = pd.to_datetime(resp["prazo"], errors="coerce")
     alocacao["data_mes"] = pd.to_datetime(alocacao["data_mes"], errors="coerce")
     atividades["eh_entregavel"] = atividades["eh_entregavel"].fillna(False).astype(bool)
     resp["eh_entregavel"] = resp["eh_entregavel"].fillna(False).astype(bool)
     atividades["responsaveis"] = atividades["responsaveis"].fillna("")
+    return atividades, resp, alocacao, pessoas
 
-    return atividades, resp, alocacao, envolvimento, pessoas, projetos
+
+def estilizar_fig(fig, altura=380):
+    fig.update_layout(
+        height=altura,
+        margin=dict(t=30, b=30, l=10, r=10),
+        paper_bgcolor=BG,
+        plot_bgcolor=BG,
+        font=dict(color=TEXTO_DIM, family="sans-serif"),
+        xaxis=dict(gridcolor=BORDA, zerolinecolor=BORDA, color=TEXTO_DIM),
+        yaxis=dict(gridcolor=BORDA, zerolinecolor=BORDA, color=TEXTO_DIM),
+        legend=dict(bgcolor=BG_CARD, bordercolor=BORDA, font=dict(color=TEXTO)),
+    )
+    return fig
 
 
 def aplicar_filtros_globais(df_at, df_resp):
     with st.sidebar:
-        st.header("🔍 Filtros")
-
-        st.subheader("Período")
+        st.markdown("### CLEAR 2026")
+        st.caption("Organização e Alocação")
+        st.markdown("---")
+        st.markdown("**Período**")
         hoje = pd.Timestamp(date.today())
         periodo = st.radio(
             "Janela",
@@ -103,265 +114,163 @@ def aplicar_filtros_globais(df_at, df_resp):
         else:
             data_min, data_max = pd.Timestamp("2026-01-01"), pd.Timestamp("2027-12-31")
 
-        st.subheader("Projetos")
+        st.markdown("**Projetos**")
         projetos_disp = sorted(df_at["projeto"].dropna().unique())
         projs_selecionados = st.multiselect(
-            "Selecione",
-            options=projetos_disp,
-            default=projetos_disp,
+            "Selecione", options=projetos_disp, default=projetos_disp,
             label_visibility="collapsed",
         )
-
-        st.subheader("Status")
+        st.markdown("**Status**")
         status_disp = sorted(df_at["status"].dropna().unique())
         status_selecionados = st.multiselect(
-            "Selecione",
-            options=status_disp,
+            "Selecione", options=status_disp,
             default=[s for s in status_disp if s not in ("Concluído", "Reunião")],
             label_visibility="collapsed",
         )
-
         st.markdown("---")
-        st.caption(f"📅 Hoje: {date.today().strftime('%d/%m/%Y')}")
+        st.caption(f"Hoje: {date.today().strftime('%d/%m/%Y')}")
 
     mask_at = df_at["projeto"].isin(projs_selecionados) & df_at["status"].isin(status_selecionados)
     mask_resp = df_resp["projeto"].isin(projs_selecionados) & df_resp["status"].isin(status_selecionados)
-    return df_at[mask_at].copy(), df_resp[mask_resp].copy(), data_min, data_max, projs_selecionados
+    return df_at[mask_at].copy(), df_resp[mask_resp].copy(), data_min, data_max
 
 
 def view_portfolio(df_at, data_min, data_max):
-    st.header("📊 Portfólio dos Projetos")
-    st.caption(
-        "Onde estão os picos de entrega? Quais projetos concentram dedicação?"
-    )
-
+    st.subheader("Portfólio dos Projetos")
     com_data = df_at[df_at["prazo"].notna()].copy()
     no_periodo = com_data[(com_data["prazo"] >= data_min) & (com_data["prazo"] <= data_max)]
+    hoje_ts = pd.Timestamp(date.today())
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Atividades no período", len(no_periodo))
     c2.metric("Entregáveis críticos", int(no_periodo["eh_entregavel"].sum()))
     c3.metric("Em andamento", int((no_periodo["status"] == "Em Andamento").sum()))
-    atrasados = no_periodo[
-        (no_periodo["status"] != "Concluído")
-        & (no_periodo["prazo"] < pd.Timestamp(date.today()))
-    ]
-    c4.metric("⚠️ Atrasados", len(atrasados), delta_color="inverse")
+    atrasados = no_periodo[(no_periodo["status"] != "Concluído") & (no_periodo["prazo"] < hoje_ts)]
+    c4.metric("Atrasados", len(atrasados))
 
     st.markdown("---")
-
-    st.subheader("Densidade de atividades — projeto × mês")
-    st.caption("Quanto mais escuro, mais atividades com prazo no mês.")
-    if not com_data.empty:
-        com_data["mes_ref"] = com_data["prazo"].dt.to_period("M").dt.to_timestamp()
-        densidade = com_data.groupby(["projeto", "mes_ref"]).size().reset_index(name="qtd")
-        fig = px.density_heatmap(
-            densidade,
-            x="mes_ref",
-            y="projeto",
-            z="qtd",
-            color_continuous_scale=[[0, "#E0E7FF"], [0.5, "#3B82F6"], [1.0, "#001F4D"]],
-            labels={"mes_ref": "Mês", "projeto": "", "qtd": "Atividades"},
+    st.markdown("**Atividades por projeto no período**")
+    if not no_periodo.empty:
+        por_projeto = (
+            no_periodo.groupby("projeto")
+            .agg(total=("id_atividade", "count"), entregaveis=("eh_entregavel", "sum"))
+            .reset_index()
+            .sort_values("total", ascending=True)
         )
-        fig.update_xaxes(dtick="M1", tickformat="%b/%y")
-        fig.update_layout(template=PLOTLY_TEMPLATE, height=380, margin=dict(t=20, b=20))
-        st.plotly_chart(fig, use_container_width=True)
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            y=por_projeto["projeto"],
+            x=por_projeto["total"] - por_projeto["entregaveis"],
+            orientation="h", marker_color=AZUL_ESCURO,
+            name="Atividades regulares",
+            hovertemplate="<b>%{y}</b><br>Regulares: %{x}<extra></extra>",
+        ))
+        fig.add_trace(go.Bar(
+            y=por_projeto["projeto"], x=por_projeto["entregaveis"],
+            orientation="h", marker_color=AZUL,
+            name="Entregáveis críticos",
+            hovertemplate="<b>%{y}</b><br>Entregáveis: %{x}<extra></extra>",
+        ))
+        fig.update_layout(barmode="stack", xaxis_title="", yaxis_title="")
+        fig = estilizar_fig(fig, altura=380)
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     else:
-        st.info("Sem atividades com data no filtro atual.")
+        st.info("Sem atividades no período filtrado.")
 
-    with st.expander("📅 Ver timeline detalhada de atividades", expanded=False):
-        st.caption("Cada ponto é uma atividade. Maior = entregável crítico. A linha indica hoje.")
+    with st.expander("Ver timeline detalhada (atividade por atividade)"):
         if not no_periodo.empty:
-            no_periodo = no_periodo.copy()
-            no_periodo["tamanho"] = no_periodo["eh_entregavel"].map({True: 18, False: 8})
-            no_periodo["atividade_curta"] = no_periodo["atividade"].str[:90]
+            no_periodo_tl = no_periodo.copy()
+            no_periodo_tl["tamanho"] = no_periodo_tl["eh_entregavel"].map({True: 16, False: 7})
+            no_periodo_tl["atividade_curta"] = no_periodo_tl["atividade"].str[:90]
             fig = px.scatter(
-                no_periodo,
-                x="prazo",
-                y="projeto",
-                color="status",
-                color_discrete_map=CORES_STATUS,
-                size="tamanho",
-                size_max=18,
+                no_periodo_tl, x="prazo", y="projeto", color="status",
+                color_discrete_map=CORES_STATUS, size="tamanho", size_max=16,
                 hover_name="atividade_curta",
-                hover_data={
-                    "responsaveis": True,
-                    "sub_projeto": True,
-                    "prazo": "|%d/%m/%Y",
-                    "tamanho": False,
-                    "atividade_curta": False,
-                },
+                hover_data={"responsaveis": True, "sub_projeto": True,
+                            "prazo": "|%d/%m/%Y", "tamanho": False, "atividade_curta": False},
             )
-            fig.update_layout(template=PLOTLY_TEMPLATE, height=460, margin=dict(t=20, b=20))
-            hoje_ts = pd.Timestamp(date.today())
-            fig.add_shape(
-                type="line", x0=hoje_ts, x1=hoje_ts, y0=0, y1=1, yref="paper",
-                line=dict(color="#001F4D", width=2, dash="dash"),
-            )
-            fig.add_annotation(
-                x=hoje_ts, y=1, yref="paper", text="hoje", showarrow=False,
-                font=dict(color="#001F4D"), yshift=10,
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Sem atividades no período filtrado.")
+            fig.add_shape(type="line", x0=hoje_ts, x1=hoje_ts, y0=0, y1=1, yref="paper",
+                          line=dict(color=AZUL_CLARO, width=2, dash="dash"))
+            fig.add_annotation(x=hoje_ts, y=1, yref="paper", text="hoje",
+                               showarrow=False, font=dict(color=AZUL_CLARO), yshift=10)
+            fig = estilizar_fig(fig, altura=460)
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    st.subheader("📌 Próximos entregáveis no período")
+    st.markdown("---")
+    st.markdown("**Próximos entregáveis no período**")
     entregaveis = no_periodo[no_periodo["eh_entregavel"]].sort_values("prazo")
     if entregaveis.empty:
         st.info("Sem entregáveis no período filtrado.")
     else:
         st.dataframe(
-            entregaveis[
-                ["prazo", "projeto", "sub_projeto", "atividade", "responsaveis", "status"]
-            ].rename(
-                columns={
-                    "prazo": "Prazo",
-                    "projeto": "Projeto",
-                    "sub_projeto": "Subprojeto",
-                    "atividade": "Entregável",
-                    "responsaveis": "Responsáveis",
-                    "status": "Status",
-                }
-            ),
-            use_container_width=True,
-            hide_index=True,
+            entregaveis[["prazo", "projeto", "sub_projeto", "atividade", "responsaveis", "status"]].rename(
+                columns={"prazo": "Prazo", "projeto": "Projeto", "sub_projeto": "Subprojeto",
+                         "atividade": "Entregável", "responsaveis": "Responsáveis", "status": "Status"}),
+            use_container_width=True, hide_index=True,
             column_config={"Prazo": st.column_config.DateColumn(format="DD/MM/YYYY")},
         )
 
 
 def view_pesquisador(df_resp, df_alocacao, df_pessoas, data_min, data_max):
-    st.header("👤 Visão por Pesquisador")
-    st.caption("Pulverização de projetos por mês + atividades sob responsabilidade.")
-
+    st.subheader("Pesquisador")
     pessoas_lista = df_pessoas["pessoa"].sort_values().tolist()
     pessoa = st.selectbox("Pesquisador(a)", pessoas_lista)
 
     aloc_pessoa = df_alocacao[df_alocacao["pessoa"] == pessoa].sort_values("data_mes").copy()
-    if aloc_pessoa.empty:
-        st.warning(f"{pessoa} não está na planilha de alocação (mas pode ter atividades atribuídas).")
-    else:
+    if not aloc_pessoa.empty:
         carga_sem = aloc_pessoa["carga_horaria_semanal"].iloc[0]
         media_proj = aloc_pessoa["n_projetos_no_mes"].mean()
         max_proj = aloc_pessoa["n_projetos_no_mes"].max()
         pico_mes = aloc_pessoa.loc[aloc_pessoa["n_projetos_no_mes"].idxmax(), "mes"]
 
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Dedicação contratual", f"{carga_sem:.0f}h/sem")
-        c2.metric("Média de projetos/mês", f"{media_proj:.1f}")
+        c1.metric("Dedicação", f"{carga_sem:.0f}h/sem")
+        c2.metric("Média projetos/mês", f"{media_proj:.1f}")
         c3.metric("Pico de projetos", int(max_proj), help=f"em {pico_mes}")
         n_at = (df_resp[df_resp["responsavel"] == pessoa]["status"] != "Concluído").sum()
         c4.metric("Atividades em aberto", int(n_at))
 
-        st.subheader("Pulverização: projetos simultâneos por mês")
-        st.caption(
-            "Quantos projetos a pessoa está envolvida em cada mês. "
-            "Acima de 6 projetos simultâneos é sinal de pulverização excessiva."
-        )
+        st.markdown("---")
+        st.markdown("**Projetos simultâneos por mês**")
 
-        def cor_n_projetos(n):
-            if n >= 8:
-                return "#001F4D"   # azul-marinho profundo — pulverização crítica
-            if n >= 6:
-                return "#0033A0"   # azul FGV — atenção
-            return "#93C5FD"        # azul claro — normal
+        def cor_n(n):
+            if n >= 8: return AZUL_CLARO
+            if n >= 6: return AZUL
+            return AZUL_ESCURO
 
-        cores = [cor_n_projetos(n) for n in aloc_pessoa["n_projetos_no_mes"]]
+        cores = [cor_n(n) for n in aloc_pessoa["n_projetos_no_mes"]]
         fig = go.Figure()
-        fig.add_trace(
-            go.Bar(
-                x=aloc_pessoa["mes"],
-                y=aloc_pessoa["n_projetos_no_mes"],
-                marker_color=cores,
-                text=aloc_pessoa["n_projetos_no_mes"],
-                textposition="outside",
-                hovertemplate="<b>%{x}</b><br>Projetos simultâneos: %{y}<extra></extra>",
-            )
-        )
-        fig.update_layout(
-            height=320,
-            margin=dict(t=40, b=20),
-            yaxis_title="Nº de projetos simultâneos",
-            xaxis_title="",
-            showlegend=False,
-        )
-        # Linhas de referência sem add_hline (compatibilidade Plotly 6.7)
-        fig.add_shape(type="line", x0=-0.5, x1=len(aloc_pessoa)-0.5, y0=8, y1=8,
-                      line=dict(color="#001F4D", width=1, dash="dash"))
-        fig.add_annotation(x=len(aloc_pessoa)-1, y=8, text="muito pulverizado",
-                           showarrow=False, font=dict(color="#001F4D", size=10), yshift=10, xanchor="right")
-        fig.add_shape(type="line", x0=-0.5, x1=len(aloc_pessoa)-0.5, y0=6, y1=6,
-                      line=dict(color="#0033A0", width=1, dash="dot"))
-        fig.add_annotation(x=len(aloc_pessoa)-1, y=6, text="atenção",
-                           showarrow=False, font=dict(color="#0033A0", size=10), yshift=10, xanchor="right")
-        st.plotly_chart(fig, use_container_width=True)
+        fig.add_trace(go.Bar(
+            x=aloc_pessoa["mes"], y=aloc_pessoa["n_projetos_no_mes"],
+            marker_color=cores, text=aloc_pessoa["n_projetos_no_mes"],
+            textposition="outside", textfont=dict(color=TEXTO),
+            hovertemplate="<b>%{x}</b><br>Projetos: %{y}<extra></extra>",
+        ))
+        fig.update_layout(yaxis_title="", xaxis_title="", showlegend=False)
+        fig = estilizar_fig(fig, altura=320)
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     st.markdown("---")
-
-    st.subheader(f"Atividades de {pessoa}")
+    st.markdown(f"**Atividades de {pessoa}**")
     at_pessoa = df_resp[df_resp["responsavel"] == pessoa].copy()
     at_com_data = at_pessoa[at_pessoa["prazo"].notna()]
-    at_no_periodo = at_com_data[
-        (at_com_data["prazo"] >= data_min) & (at_com_data["prazo"] <= data_max)
-    ]
 
-    if not at_no_periodo.empty:
-        at_no_periodo = at_no_periodo.copy()
-        at_no_periodo["tamanho"] = at_no_periodo["eh_entregavel"].map({True: 16, False: 8})
-        at_no_periodo["atividade_curta"] = at_no_periodo["atividade"].str[:90]
-        fig = px.scatter(
-            at_no_periodo,
-            x="prazo",
-            y="projeto",
-            color="status",
-            color_discrete_map=CORES_STATUS,
-            size="tamanho",
-            size_max=16,
-            hover_name="atividade_curta",
-            hover_data={
-                "sub_projeto": True,
-                "prazo": "|%d/%m/%Y",
-                "tamanho": False,
-                "atividade_curta": False,
-            },
-        )
-        fig.update_layout(template=PLOTLY_TEMPLATE, height=360, margin=dict(t=20, b=20))
-        hoje_ts = pd.Timestamp(date.today())
-        fig.add_shape(
-            type="line", x0=hoje_ts, x1=hoje_ts, y0=0, y1=1, yref="paper",
-            line=dict(color="#001F4D", width=2, dash="dash"),
-        )
-        fig.add_annotation(
-            x=hoje_ts, y=1, yref="paper", text="hoje", showarrow=False,
-            font=dict(color="#001F4D"), yshift=10,
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    if at_com_data.empty:
+        st.info(f"{pessoa} não tem atividades com data atribuídas.")
     else:
-        st.info(f"{pessoa} não tem atividades com data no período selecionado.")
-
-    with st.expander(f"Ver tabela completa ({len(at_com_data)} atividades com data)"):
         st.dataframe(
             at_com_data.sort_values("prazo")[
                 ["prazo", "projeto", "sub_projeto", "atividade", "status", "eh_entregavel"]
-            ].rename(
-                columns={
-                    "prazo": "Prazo",
-                    "projeto": "Projeto",
-                    "sub_projeto": "Subprojeto",
-                    "atividade": "Atividade",
-                    "status": "Status",
-                    "eh_entregavel": "Entregável?",
-                }
-            ),
-            use_container_width=True,
-            hide_index=True,
+            ].rename(columns={"prazo": "Prazo", "projeto": "Projeto", "sub_projeto": "Subprojeto",
+                              "atividade": "Atividade", "status": "Status", "eh_entregavel": "Entregável?"}),
+            use_container_width=True, hide_index=True,
             column_config={"Prazo": st.column_config.DateColumn(format="DD/MM/YYYY")},
         )
 
 
-def view_linha_chegada(df_at, data_min, data_max):
-    st.header("📅 Próximas Entregas")
-    st.caption("O que precisa ficar pronto nas próximas semanas, agrupado por urgência.")
+def view_proximas_entregas(df_at, data_min, data_max):
+    st.subheader("Próximas Entregas")
+    st.caption("Entregas críticas agrupadas por urgência.")
 
     entregaveis = df_at[df_at["eh_entregavel"] & df_at["prazo"].notna()].copy()
     entregaveis_periodo = entregaveis[
@@ -369,36 +278,26 @@ def view_linha_chegada(df_at, data_min, data_max):
     ].sort_values("prazo")
 
     if entregaveis_periodo.empty:
-        st.info("Nenhum entregável crítico no período. Tente ampliar a janela na barra lateral.")
+        st.info("Nenhum entregável crítico no período.")
         return
 
     hoje = pd.Timestamp(date.today())
-    proximos_7 = entregaveis_periodo[
-        (entregaveis_periodo["prazo"] >= hoje)
-        & (entregaveis_periodo["prazo"] <= hoje + pd.Timedelta(days=7))
-    ]
-    proximos_30 = entregaveis_periodo[
-        (entregaveis_periodo["prazo"] > hoje + pd.Timedelta(days=7))
-        & (entregaveis_periodo["prazo"] <= hoje + pd.Timedelta(days=30))
-    ]
-    atrasados = entregaveis_periodo[
-        (entregaveis_periodo["prazo"] < hoje) & (entregaveis_periodo["status"] != "Concluído")
-    ]
+    atrasados = entregaveis_periodo[(entregaveis_periodo["prazo"] < hoje) & (entregaveis_periodo["status"] != "Concluído")]
+    proximos_7 = entregaveis_periodo[(entregaveis_periodo["prazo"] >= hoje) & (entregaveis_periodo["prazo"] <= hoje + pd.Timedelta(days=7))]
+    proximos_30 = entregaveis_periodo[(entregaveis_periodo["prazo"] > hoje + pd.Timedelta(days=7)) & (entregaveis_periodo["prazo"] <= hoje + pd.Timedelta(days=30))]
     futuros = entregaveis_periodo[entregaveis_periodo["prazo"] > hoje + pd.Timedelta(days=30)]
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("⚠️ Atrasados", len(atrasados), delta_color="inverse")
-    c2.metric("🔥 Próximos 7 dias", len(proximos_7))
-    c3.metric("⏳ Próximos 30 dias", len(proximos_30))
-    c4.metric("📅 Depois", len(futuros))
+    c1.metric("Atrasados", len(atrasados))
+    c2.metric("Próx. 7 dias", len(proximos_7))
+    c3.metric("Próx. 30 dias", len(proximos_30))
+    c4.metric("Depois", len(futuros))
 
     st.markdown("---")
 
-    def mostrar_bloco(titulo, df, emoji, limite=15):
-        if df.empty:
-            return
-        total = len(df)
-        st.subheader(f"{emoji} {titulo} ({total})")
+    def mostrar_bloco(titulo, df, limite=15):
+        if df.empty: return
+        st.markdown(f"**{titulo}** ({len(df)})")
         df_mostrar = df.head(limite)
         for _, row in df_mostrar.iterrows():
             dias = (row["prazo"] - hoje).days
@@ -408,68 +307,47 @@ def view_linha_chegada(df_at, data_min, data_max):
                 dias_txt = "<b>hoje</b>"
             else:
                 dias_txt = f"em {dias} dias"
-            cor = CORES_STATUS.get(row["status"], "#94A3B8")
-            resp_txt = row["responsaveis"] if row["responsaveis"] else "<i>sem responsável CLEAR</i>"
-            st.markdown(
-                f"""
-                <div style="border-left: 4px solid {cor}; padding: 8px 14px; margin-bottom: 8px; background: #F8FAFC; border-radius: 4px;">
-                  <div style="font-size: 0.85rem; color: #475569;">
-                    <b>{row['prazo'].strftime('%d/%m/%Y')}</b> · {dias_txt} · <span style="color:{cor};">{row['status']}</span>
+            cor = CORES_STATUS.get(row["status"], TEXTO_DIM)
+            resp_txt = row["responsaveis"] if row["responsaveis"] else "<i>sem responsável</i>"
+            st.markdown(f"""
+                <div style="border-left: 3px solid {cor}; padding: 10px 14px; margin-bottom: 8px;
+                            background: {BG_CARD}; border-radius: 4px;">
+                  <div style="font-size: 0.8rem; color: {TEXTO_DIM};">
+                    <b style="color: {TEXTO};">{row['prazo'].strftime('%d/%m/%Y')}</b>
+                    · {dias_txt} · <span style="color: {cor};">{row['status']}</span>
                   </div>
-                  <div style="font-weight: 600; margin: 4px 0;">{row['atividade']}</div>
-                  <div style="font-size: 0.85rem; color: #475569;">
-                    <i>{row['projeto']}</i> — {row['sub_projeto']}<br>
-                    👥 {resp_txt}
+                  <div style="font-weight: 600; margin: 4px 0; color: {TEXTO};">{row['atividade']}</div>
+                  <div style="font-size: 0.85rem; color: {TEXTO_DIM};">
+                    <i>{row['projeto']}</i> — {row['sub_projeto']}<br>{resp_txt}
                   </div>
                 </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        if total > limite:
-            st.caption(f"...e mais {total - limite} item(ns). Use os filtros laterais para refinar.")
+            """, unsafe_allow_html=True)
+        if len(df) > limite:
+            st.caption(f"...e mais {len(df) - limite} item(ns).")
+        st.markdown("")
 
-    mostrar_bloco("Atrasados", atrasados, "⚠️")
-    mostrar_bloco("Próximos 7 dias", proximos_7, "🔥")
-    mostrar_bloco("Próximos 30 dias", proximos_30, "⏳")
-    mostrar_bloco("Mais à frente", futuros, "📅")
+    mostrar_bloco("Atrasados", atrasados)
+    mostrar_bloco("Próximos 7 dias", proximos_7)
+    mostrar_bloco("Próximos 30 dias", proximos_30)
+    mostrar_bloco("Mais à frente", futuros)
 
 
 def main():
-    st.title("CLEAR 2026 — Organização e Alocação")
-
     try:
-        df_at, df_resp, df_alocacao, df_envolvimento, df_pessoas, df_projetos = carregar_dados()
+        df_at, df_resp, df_alocacao, df_pessoas = carregar_dados()
     except FileNotFoundError:
-        st.error(
-            f"Planilha mestra não encontrada em {MASTER_FILE}. "
-            "Coloque CLEAR_Master_2026.xlsx na mesma pasta do app.py."
-        )
+        st.error("Planilha mestra não encontrada.")
         st.stop()
 
-    df_at_f, df_resp_f, data_min, data_max, projs = aplicar_filtros_globais(df_at, df_resp)
+    df_at_f, df_resp_f, data_min, data_max = aplicar_filtros_globais(df_at, df_resp)
 
-    # Lazy load: só roda a vista selecionada (em vez de st.tabs que carrega todas)
-    with st.sidebar:
-        st.markdown("---")
-        st.subheader("Visão")
-        view = st.radio(
-            "Visão",
-            ["📊 Portfólio", "👤 Pesquisador", "📅 Próximas Entregas"],
-            label_visibility="collapsed",
-        )
-
-    if view == "📊 Portfólio":
+    tab1, tab2, tab3 = st.tabs(["Portfólio", "Pesquisador", "Próximas Entregas"])
+    with tab1:
         view_portfolio(df_at_f, data_min, data_max)
-    elif view == "👤 Pesquisador":
+    with tab2:
         view_pesquisador(df_resp_f, df_alocacao, df_pessoas, data_min, data_max)
-    else:
-        view_linha_chegada(df_at_f, data_min, data_max)
-
-    st.markdown("---")
-    st.caption(
-        "Dados: `CLEAR_Master_2026.xlsx`. "
-        "Para atualizar, edite a planilha e dê reload no app (botão R)."
-    )
+    with tab3:
+        view_proximas_entregas(df_at_f, data_min, data_max)
 
 
 if __name__ == "__main__":
