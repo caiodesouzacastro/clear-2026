@@ -24,15 +24,57 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# CSS customizado para garantir tema claro e estilo FGV
+st.markdown("""
+<style>
+    /* Forçar tema claro */
+    .stApp { background-color: #FFFFFF; color: #1E293B; }
+    [data-testid="stSidebar"] { background-color: #F8FAFC; }
+    
+    /* Títulos em azul FGV */
+    h1, h2, h3 { color: #002B5C !important; }
+    
+    /* Métricas */
+    [data-testid="stMetricValue"] { color: #002B5C; font-weight: 700; }
+    [data-testid="stMetricLabel"] { color: #475569; }
+    
+    /* Abas */
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #F1F5F9;
+        border-radius: 6px 6px 0 0;
+        padding: 8px 16px;
+        color: #475569;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #0033A0 !important;
+        color: white !important;
+    }
+    
+    /* Botão de filtros */
+    .stRadio > label, .stMultiSelect > label, .stSelectbox > label {
+        color: #002B5C;
+        font-weight: 600;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 MASTER_FILE = Path(__file__).parent / "CLEAR_Master_2026.xlsx"
 
 CORES_STATUS = {
-    "Concluído": "#16A34A",
-    "Em Andamento": "#2563EB",
-    "Não Iniciado": "#94A3B8",
-    "Atrasado": "#DC2626",
-    "Reunião": "#8B5CF6",
+    "Concluído": "#1F7A3D",      # verde sóbrio
+    "Em Andamento": "#0033A0",   # azul FGV
+    "Não Iniciado": "#6B7280",   # cinza médio
+    "Atrasado": "#B91C1C",       # vermelho escuro
+    "Reunião": "#6B21A8",        # roxo sóbrio
 }
+
+# Paleta FGV
+COR_PRIMARIA = "#0033A0"     # azul FGV
+COR_PRIMARIA_ESCURA = "#002B5C"  # azul FGV escuro
+COR_SECUNDARIA = "#475569"   # cinza escuro
+COR_FUNDO_CARD = "#F8FAFC"   # cinza muito claro
+COR_BORDA = "#E2E8F0"        # cinza claro
 
 
 @st.cache_data(show_spinner="Carregando planilha mestra...")
@@ -132,7 +174,7 @@ def view_portfolio(df_at, data_min, data_max):
             x="mes_ref",
             y="projeto",
             z="qtd",
-            color_continuous_scale="Blues",
+            color_continuous_scale=[[0, "#FFFFFF"], [0.3, "#BFDBFE"], [0.6, "#3B82F6"], [1.0, "#002B5C"]],
             labels={"mes_ref": "Mês", "projeto": "", "qtd": "Atividades"},
         )
         fig.update_xaxes(dtick="M1", tickformat="%b/%y")
@@ -233,10 +275,10 @@ def view_pesquisador(df_resp, df_alocacao, df_pessoas, data_min, data_max):
 
         def cor_n_projetos(n):
             if n >= 8:
-                return "#DC2626"
+                return "#B91C1C"
             if n >= 6:
-                return "#F59E0B"
-            return "#2563EB"
+                return "#D97706"
+            return "#0033A0"
 
         cores = [cor_n_projetos(n) for n in aloc_pessoa["n_projetos_no_mes"]]
         fig = go.Figure()
