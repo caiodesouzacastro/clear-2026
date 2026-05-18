@@ -77,6 +77,28 @@ st.markdown(f"""
     .stButton button {{ background-color: {BG_CARD}; color: {TEXTO};
         border: 1px solid {BORDA}; }}
     .stButton button:hover {{ background-color: {BG_HOVER}; border-color: {AZUL}; }}
+
+    /* Forçar azul nos controles nativos (remove o laranja padrão do Streamlit) */
+    [data-testid="stRadio"] [data-baseweb="radio"] div[aria-checked="true"],
+    [data-baseweb="radio"] div[aria-checked="true"] {{
+        background-color: {AZUL} !important;
+        border-color: {AZUL} !important;
+    }}
+    [data-testid="stCheckbox"] [data-baseweb="checkbox"] span[aria-checked="true"] {{
+        background-color: {AZUL} !important;
+        border-color: {AZUL} !important;
+    }}
+    input[type="radio"]:checked + div {{ background-color: {AZUL} !important; }}
+    [data-testid="stSlider"] [data-baseweb="slider"] div {{ background-color: {AZUL} !important; }}
+    a {{ color: {AZUL_CLARO} !important; }}
+    *:focus {{ outline-color: {AZUL} !important; }}
+    [data-baseweb="radio"] svg {{ fill: {AZUL} !important; }}
+    [role="radiogroup"] label div:first-child {{ border-color: {AZUL} !important; }}
+    /* Rede de segurança: reescreve a cor primária via variável CSS do Streamlit */
+    :root {{
+        --primary-color: {AZUL} !important;
+        --primaryColor: {AZUL} !important;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
