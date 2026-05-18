@@ -177,63 +177,36 @@ def aba_gantt(df_at):
         d = com_data[com_data["projeto"] == proj]
         dmin = d["prazo"].min()
         dmax = d["prazo"].max()
-        # posição da barra (% do ano)
         ini_pct = max(0, (dmin - ano_ini).days / total_dias * 100)
         fim_pct = min(100, (dmax - ano_ini).days / total_dias * 100)
         larg_pct = max(1.5, fim_pct - ini_pct)
         n_entreg = int(d["eh_entregavel"].sum())
         n_total = len(d)
 
-        # marcadores de entregáveis
         marcadores = ""
         for _, r in d[d["eh_entregavel"]].iterrows():
             pos = (r["prazo"] - ano_ini).days / total_dias * 100
-            marcadores += (
-                f'<div title="{r["atividade"][:60]} ({r["prazo"].strftime("%d/%m")})" '
-                f'style="position:absolute; left:{pos:.1f}%; top:50%; '
-                f'transform:translate(-50%,-50%); width:9px; height:9px; '
-                f'background:{AZUL_CLARO}; border:1.5px solid {BG}; '
-                f'border-radius:50%; z-index:2;"></div>'
-            )
+            tt = str(r["atividade"])[:60].replace('"', "'")
+            marcadores += (f'<div title="{tt} ({r["prazo"].strftime("%d/%m")})" style="position:absolute;left:{pos:.1f}%;top:50%;transform:translate(-50%,-50%);width:9px;height:9px;background:{AZUL_CLARO};border:1.5px solid {BG};border-radius:50%;z-index:2;"></div>')
 
-        linhas_html += f"""
-        <div style="display:flex; align-items:center; margin-bottom:6px;">
-          <div style="width:170px; font-size:0.8rem; color:{TEXTO};
-                      padding-right:10px; text-align:right; flex-shrink:0;">
-            {proj}<br><span style="color:{TEXTO_DIM2}; font-size:0.7rem;">
-            {n_total} ativ · {n_entreg} entreg</span>
-          </div>
-          <div style="flex:1; position:relative; height:26px;
-                      background:{BG_CARD}; border-radius:3px;">
-            <div style="position:absolute; left:{ini_pct:.1f}%; width:{larg_pct:.1f}%;
-                        top:6px; height:14px; background:{AZUL_ESCURO};
-                        border-radius:3px;"></div>
-            {marcadores}
-          </div>
-        </div>
-        """
+        linhas_html += (
+            f'<div style="display:flex;align-items:center;margin-bottom:6px;">'
+            f'<div style="width:170px;font-size:0.8rem;color:{TEXTO};padding-right:10px;text-align:right;flex-shrink:0;">'
+            f'{proj}<br><span style="color:{TEXTO_DIM2};font-size:0.7rem;">{n_total} ativ · {n_entreg} entreg</span></div>'
+            f'<div style="flex:1;position:relative;height:26px;background:{BG_CARD};border-radius:3px;">'
+            f'<div style="position:absolute;left:{ini_pct:.1f}%;width:{larg_pct:.1f}%;top:6px;height:14px;background:{AZUL_ESCURO};border-radius:3px;"></div>'
+            f'{marcadores}</div></div>'
+        )
 
-    # linha "hoje"
-    hoje_pct = (hoje - ano_ini).days / total_dias * 100
-    linha_hoje = (
-        f'<div style="position:absolute; left:calc(170px + {hoje_pct:.1f}% '
-        f'* (100% - 170px) / 100); top:0; bottom:0; width:2px; '
-        f'background:{AZUL_CLARO}; opacity:0.6; z-index:3;"></div>'
+    html = (
+        f'<div style="background:{BG};padding:14px;border-radius:6px;border:1px solid {BORDA};">'
+        f'<div style="display:flex;margin-bottom:8px;">'
+        f'<div style="width:170px;flex-shrink:0;"></div>'
+        f'<div style="flex:1;display:flex;">{header_meses}</div></div>'
+        f'{linhas_html}</div>'
+        f'<div style="font-size:0.75rem;color:{TEXTO_DIM2};margin-top:8px;">'
+        f'● Marcadores azuis = entregáveis críticos · Barra = período de atividades do projeto</div>'
     )
-
-    html = f"""
-    <div style="background:{BG}; padding:14px; border-radius:6px;
-                border:1px solid {BORDA}; position:relative;">
-      <div style="display:flex; margin-bottom:8px;">
-        <div style="width:170px; flex-shrink:0;"></div>
-        <div style="flex:1; display:flex;">{header_meses}</div>
-      </div>
-      {linhas_html}
-    </div>
-    <div style="font-size:0.75rem; color:{TEXTO_DIM2}; margin-top:8px;">
-      ● Marcadores azuis = entregáveis críticos · Barra = período de atividades do projeto
-    </div>
-    """
     st.markdown(html, unsafe_allow_html=True)
 
 
@@ -322,15 +295,13 @@ def aba_calendario(df_at):
             semana.append('<div style="flex:1;"></div>')
         linhas += f'<div style="display:flex;">{"".join(semana)}</div>'
 
-    html = f"""
-    <div style="background:{BG}; padding:10px; border-radius:6px; border:1px solid {BORDA};">
-      <div style="display:flex; margin-bottom:4px;">{header}</div>
-      {linhas}
-    </div>
-    <div style="font-size:0.75rem; color:{TEXTO_DIM2}; margin-top:8px;">
-      ◆ = entregável crítico · Cor da borda do item = status
-    </div>
-    """
+    html = (
+        f'<div style="background:{BG};padding:10px;border-radius:6px;border:1px solid {BORDA};">'
+        f'<div style="display:flex;margin-bottom:4px;">{header}</div>'
+        f'{linhas}</div>'
+        f'<div style="font-size:0.75rem;color:{TEXTO_DIM2};margin-top:8px;">'
+        f'◆ = entregável crítico · Cor da borda do item = status</div>'
+    )
     st.markdown(html, unsafe_allow_html=True)
 
     st.metric("Entregas neste mês", len(do_mes))
@@ -385,15 +356,13 @@ def aba_equipe(df_aloc):
                         f'{n if n > 0 else ""}</div>')
         linhas += f'<div style="display:flex; align-items:center; margin-bottom:2px;">{celulas}</div>'
 
-    html = f"""
-    <div style="background:{BG}; padding:12px; border-radius:6px; border:1px solid {BORDA};">
-      <div style="display:flex; margin-bottom:4px;">{header}</div>
-      {linhas}
-    </div>
-    <div style="font-size:0.75rem; color:{TEXTO_DIM2}; margin-top:8px;">
-      Número = projetos simultâneos no mês · 6+ projetos indica pulverização
-    </div>
-    """
+    html = (
+        f'<div style="background:{BG};padding:12px;border-radius:6px;border:1px solid {BORDA};">'
+        f'<div style="display:flex;margin-bottom:4px;">{header}</div>'
+        f'{linhas}</div>'
+        f'<div style="font-size:0.75rem;color:{TEXTO_DIM2};margin-top:8px;">'
+        f'Número = projetos simultâneos no mês · 6+ projetos indica pulverização</div>'
+    )
     st.markdown(html, unsafe_allow_html=True)
 
 
