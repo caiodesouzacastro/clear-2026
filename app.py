@@ -1,21 +1,23 @@
 """
 CLEAR 2026 — Dashboard de Organização e Alocação
 FGV CLEAR
+
+4 abas: Visão Geral (Gantt), Calendário, Equipe, Pesquisador.
+Gantt e calendário em HTML puro (sem Plotly) para carregar rápido.
 """
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 from datetime import date
 from pathlib import Path
+import calendar as cal_mod
 
-st.set_page_config(
-    page_title="CLEAR 2026",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+# ============================================================
+# Configuração
+# ============================================================
+st.set_page_config(page_title="CLEAR 2026", page_icon="📊", layout="wide",
+                   initial_sidebar_state="expanded")
 
 MASTER_FILE = Path(__file__).parent / "CLEAR_Master_2026.xlsx"
 
@@ -29,7 +31,7 @@ TEXTO_DIM2 = "#6F7E8C"
 BORDA = "#1E3A5F"
 AZUL = "#5090D3"
 AZUL_CLARO = "#7BB3F0"
-AZUL_ESCURO = "#1E3A5F"
+AZUL_ESCURO = "#26456B"
 
 CORES_STATUS = {
     "Concluído": "#6F7E8C",
@@ -39,315 +41,453 @@ CORES_STATUS = {
     "Reunião": "#4A6FA5",
 }
 
+MESES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+            "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+MESES_PT_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+                 "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+
+# ============================================================
+# CSS — tema escuro Bloomberg
+# ============================================================
 st.markdown(f"""
 <style>
     .stApp {{ background-color: {BG}; }}
     .main, .block-container {{ background-color: {BG}; color: {TEXTO}; }}
+    .block-container {{ padding-top: 2rem; }}
     [data-testid="stSidebar"] {{ background-color: {BG_CARD}; }}
     [data-testid="stSidebar"] > div {{ background-color: {BG_CARD}; }}
     h1, h2, h3, h4, h5, h6 {{ color: {TEXTO} !important; font-weight: 600; }}
-    p, span, label, div {{ color: {TEXTO}; }}
-    [data-testid="stMetricValue"] {{ color: {TEXTO} !important; font-weight: 700; font-size: 2.2rem; }}
-    [data-testid="stMetricLabel"] {{ color: {TEXTO_DIM} !important; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }}
-    .stTabs [data-baseweb="tab-list"] {{ gap: 4px; background-color: {BG}; border-bottom: 1px solid {BORDA}; }}
-    .stTabs [data-baseweb="tab"] {{ background-color: transparent; color: {TEXTO_DIM}; padding: 10px 20px; border-radius: 0; border-bottom: 2px solid transparent; }}
-    .stTabs [aria-selected="true"] {{ background-color: transparent !important; color: {AZUL} !important; border-bottom: 2px solid {AZUL} !important; font-weight: 600; }}
+    p, span, label {{ color: {TEXTO}; }}
+    [data-testid="stMetricValue"] {{ color: {TEXTO} !important; font-weight: 700; font-size: 2rem; }}
+    [data-testid="stMetricLabel"] {{ color: {TEXTO_DIM} !important; font-size: 0.8rem;
+        text-transform: uppercase; letter-spacing: 0.05em; }}
+    .stTabs [data-baseweb="tab-list"] {{ gap: 4px; background-color: {BG};
+        border-bottom: 1px solid {BORDA}; }}
+    .stTabs [data-baseweb="tab"] {{ background-color: transparent; color: {TEXTO_DIM};
+        padding: 10px 20px; border-bottom: 2px solid transparent; }}
+    .stTabs [aria-selected="true"] {{ background-color: transparent !important;
+        color: {AZUL} !important; border-bottom: 2px solid {AZUL} !important; font-weight: 600; }}
     [data-baseweb="tag"] {{ background-color: {BG_HOVER} !important; color: {TEXTO} !important; }}
-    [data-baseweb="select"] > div {{ background-color: {BG_CARD} !important; border-color: {BORDA} !important; }}
+    [data-baseweb="select"] > div {{ background-color: {BG_CARD} !important;
+        border-color: {BORDA} !important; }}
     [data-baseweb="input"] > div {{ background-color: {BG_CARD} !important; }}
     [data-testid="stDataFrame"] {{ background-color: {BG_CARD}; }}
-    [data-testid="stExpander"] {{ background-color: {BG_CARD}; border: 1px solid {BORDA}; border-radius: 4px; }}
-    hr {{ border-color: {BORDA}; }}
+    hr {{ border-color: {BORDA}; margin: 1rem 0; }}
     header[data-testid="stHeader"] {{ background-color: {BG}; }}
+    .stButton button {{ background-color: {BG_CARD}; color: {TEXTO};
+        border: 1px solid {BORDA}; }}
+    .stButton button:hover {{ background-color: {BG_HOVER}; border-color: {AZUL}; }}
 </style>
 """, unsafe_allow_html=True)
 
 
+# ============================================================
+# Dados
+# ============================================================
 @st.cache_data(show_spinner="Carregando...")
 def carregar_dados():
-    atividades = pd.read_excel(MASTER_FILE, sheet_name="Atividades")
+    at = pd.read_excel(MASTER_FILE, sheet_name="Atividades")
     resp = pd.read_excel(MASTER_FILE, sheet_name="Resp_Atividade")
-    alocacao = pd.read_excel(MASTER_FILE, sheet_name="Alocacao")
-    pessoas = pd.read_excel(MASTER_FILE, sheet_name="Pessoas")
-    atividades["prazo"] = pd.to_datetime(atividades["prazo"], errors="coerce")
+    aloc = pd.read_excel(MASTER_FILE, sheet_name="Alocacao")
+    pes = pd.read_excel(MASTER_FILE, sheet_name="Pessoas")
+    at["prazo"] = pd.to_datetime(at["prazo"], errors="coerce")
     resp["prazo"] = pd.to_datetime(resp["prazo"], errors="coerce")
-    alocacao["data_mes"] = pd.to_datetime(alocacao["data_mes"], errors="coerce")
-    atividades["eh_entregavel"] = atividades["eh_entregavel"].fillna(False).astype(bool)
+    aloc["data_mes"] = pd.to_datetime(aloc["data_mes"], errors="coerce")
+    at["eh_entregavel"] = at["eh_entregavel"].fillna(False).astype(bool)
     resp["eh_entregavel"] = resp["eh_entregavel"].fillna(False).astype(bool)
-    atividades["responsaveis"] = atividades["responsaveis"].fillna("")
-    return atividades, resp, alocacao, pessoas
+    at["responsaveis"] = at["responsaveis"].fillna("")
+    return at, resp, aloc, pes
 
 
-def estilizar_fig(fig, altura=380):
-    fig.update_layout(
-        height=altura,
-        margin=dict(t=30, b=30, l=10, r=10),
-        paper_bgcolor=BG,
-        plot_bgcolor=BG,
-        font=dict(color=TEXTO_DIM, family="sans-serif"),
-        xaxis=dict(gridcolor=BORDA, zerolinecolor=BORDA, color=TEXTO_DIM),
-        yaxis=dict(gridcolor=BORDA, zerolinecolor=BORDA, color=TEXTO_DIM),
-        legend=dict(bgcolor=BG_CARD, bordercolor=BORDA, font=dict(color=TEXTO)),
-    )
-    return fig
-
-
-def aplicar_filtros_globais(df_at, df_resp):
+# ============================================================
+# Sidebar — filtros globais
+# ============================================================
+def sidebar_filtros(df_at):
     with st.sidebar:
         st.markdown("### CLEAR 2026")
         st.caption("Organização e Alocação")
         st.markdown("---")
-        st.markdown("**Período**")
-        hoje = pd.Timestamp(date.today())
-        periodo = st.radio(
-            "Janela",
-            ["Próximas 4 semanas", "Próximos 3 meses", "Resto do ano", "Tudo"],
-            index=1,
+
+        st.markdown("**Mostrar**")
+        escopo = st.radio(
+            "escopo",
+            ["Só entregáveis críticos", "Todas as atividades"],
             label_visibility="collapsed",
         )
-        if periodo == "Próximas 4 semanas":
-            data_min, data_max = hoje, hoje + pd.Timedelta(days=28)
-        elif periodo == "Próximos 3 meses":
-            data_min, data_max = hoje, hoje + pd.Timedelta(days=90)
-        elif periodo == "Resto do ano":
-            data_min, data_max = hoje, pd.Timestamp("2026-12-31")
-        else:
-            data_min, data_max = pd.Timestamp("2026-01-01"), pd.Timestamp("2027-12-31")
 
         st.markdown("**Projetos**")
         projetos_disp = sorted(df_at["projeto"].dropna().unique())
-        projs_selecionados = st.multiselect(
-            "Selecione", options=projetos_disp, default=projetos_disp,
-            label_visibility="collapsed",
-        )
-        st.markdown("**Status**")
-        status_disp = sorted(df_at["status"].dropna().unique())
-        status_selecionados = st.multiselect(
-            "Selecione", options=status_disp,
-            default=[s for s in status_disp if s not in ("Concluído", "Reunião")],
-            label_visibility="collapsed",
-        )
+        projs = st.multiselect("projs", options=projetos_disp, default=projetos_disp,
+                               label_visibility="collapsed")
+
         st.markdown("---")
         st.caption(f"Hoje: {date.today().strftime('%d/%m/%Y')}")
+        st.caption("Dados: CLEAR_Master_2026.xlsx")
 
-    mask_at = df_at["projeto"].isin(projs_selecionados) & df_at["status"].isin(status_selecionados)
-    mask_resp = df_resp["projeto"].isin(projs_selecionados) & df_resp["status"].isin(status_selecionados)
-    return df_at[mask_at].copy(), df_resp[mask_resp].copy(), data_min, data_max
+    return escopo, projs
 
 
-def view_portfolio(df_at, data_min, data_max):
-    st.subheader("Portfólio dos Projetos")
+def filtrar(df_at, escopo, projs):
+    d = df_at[df_at["projeto"].isin(projs)].copy()
+    if escopo == "Só entregáveis críticos":
+        d = d[d["eh_entregavel"]]
+    return d
+
+
+# ============================================================
+# ABA 1 — Visão Geral (Gantt em HTML)
+# ============================================================
+def aba_gantt(df_at):
+    st.subheader("Visão Geral do Ano")
+
     com_data = df_at[df_at["prazo"].notna()].copy()
-    no_periodo = com_data[(com_data["prazo"] >= data_min) & (com_data["prazo"] <= data_max)]
-    hoje_ts = pd.Timestamp(date.today())
+    hoje = pd.Timestamp(date.today())
 
+    # KPIs
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Atividades no período", len(no_periodo))
-    c2.metric("Entregáveis críticos", int(no_periodo["eh_entregavel"].sum()))
-    c3.metric("Em andamento", int((no_periodo["status"] == "Em Andamento").sum()))
-    atrasados = no_periodo[(no_periodo["status"] != "Concluído") & (no_periodo["prazo"] < hoje_ts)]
-    c4.metric("Atrasados", len(atrasados))
+    c1.metric("Atividades", len(com_data))
+    c2.metric("Entregáveis", int(com_data["eh_entregavel"].sum()))
+    c3.metric("Em andamento", int((com_data["status"] == "Em Andamento").sum()))
+    atrasadas = com_data[(com_data["status"] != "Concluído") & (com_data["prazo"] < hoje)]
+    c4.metric("Atrasadas", len(atrasadas))
 
     st.markdown("---")
-    st.markdown("**Atividades por projeto no período**")
-    if not no_periodo.empty:
-        por_projeto = (
-            no_periodo.groupby("projeto")
-            .agg(total=("id_atividade", "count"), entregaveis=("eh_entregavel", "sum"))
-            .reset_index()
-            .sort_values("total", ascending=True)
-        )
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
-            y=por_projeto["projeto"],
-            x=por_projeto["total"] - por_projeto["entregaveis"],
-            orientation="h", marker_color=AZUL_ESCURO,
-            name="Atividades regulares",
-            hovertemplate="<b>%{y}</b><br>Regulares: %{x}<extra></extra>",
-        ))
-        fig.add_trace(go.Bar(
-            y=por_projeto["projeto"], x=por_projeto["entregaveis"],
-            orientation="h", marker_color=AZUL,
-            name="Entregáveis críticos",
-            hovertemplate="<b>%{y}</b><br>Entregáveis: %{x}<extra></extra>",
-        ))
-        fig.update_layout(barmode="stack", xaxis_title="", yaxis_title="")
-        fig = estilizar_fig(fig, altura=380)
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    else:
-        st.info("Sem atividades no período filtrado.")
+    st.markdown("**Linha do tempo por projeto** — 2026")
 
-    with st.expander("Ver timeline detalhada (atividade por atividade)"):
-        if not no_periodo.empty:
-            no_periodo_tl = no_periodo.copy()
-            no_periodo_tl["tamanho"] = no_periodo_tl["eh_entregavel"].map({True: 16, False: 7})
-            no_periodo_tl["atividade_curta"] = no_periodo_tl["atividade"].str[:90]
-            fig = px.scatter(
-                no_periodo_tl, x="prazo", y="projeto", color="status",
-                color_discrete_map=CORES_STATUS, size="tamanho", size_max=16,
-                hover_name="atividade_curta",
-                hover_data={"responsaveis": True, "sub_projeto": True,
-                            "prazo": "|%d/%m/%Y", "tamanho": False, "atividade_curta": False},
+    if com_data.empty:
+        st.info("Sem atividades com data no filtro atual.")
+        return
+
+    # Agrupar por projeto: data mínima e máxima de cada
+    ano_ini = pd.Timestamp("2026-01-01")
+    ano_fim = pd.Timestamp("2026-12-31")
+    total_dias = (ano_fim - ano_ini).days
+
+    projetos = sorted(com_data["projeto"].unique())
+
+    # Cabeçalho de meses
+    header_meses = "".join(
+        f'<div style="flex:1; text-align:center; font-size:0.7rem; '
+        f'color:{TEXTO_DIM2}; border-left:1px solid {BORDA}; padding:2px 0;">{m}</div>'
+        for m in MESES_PT
+    )
+
+    linhas_html = ""
+    for proj in projetos:
+        d = com_data[com_data["projeto"] == proj]
+        dmin = d["prazo"].min()
+        dmax = d["prazo"].max()
+        # posição da barra (% do ano)
+        ini_pct = max(0, (dmin - ano_ini).days / total_dias * 100)
+        fim_pct = min(100, (dmax - ano_ini).days / total_dias * 100)
+        larg_pct = max(1.5, fim_pct - ini_pct)
+        n_entreg = int(d["eh_entregavel"].sum())
+        n_total = len(d)
+
+        # marcadores de entregáveis
+        marcadores = ""
+        for _, r in d[d["eh_entregavel"]].iterrows():
+            pos = (r["prazo"] - ano_ini).days / total_dias * 100
+            marcadores += (
+                f'<div title="{r["atividade"][:60]} ({r["prazo"].strftime("%d/%m")})" '
+                f'style="position:absolute; left:{pos:.1f}%; top:50%; '
+                f'transform:translate(-50%,-50%); width:9px; height:9px; '
+                f'background:{AZUL_CLARO}; border:1.5px solid {BG}; '
+                f'border-radius:50%; z-index:2;"></div>'
             )
-            fig.add_shape(type="line", x0=hoje_ts, x1=hoje_ts, y0=0, y1=1, yref="paper",
-                          line=dict(color=AZUL_CLARO, width=2, dash="dash"))
-            fig.add_annotation(x=hoje_ts, y=1, yref="paper", text="hoje",
-                               showarrow=False, font=dict(color=AZUL_CLARO), yshift=10)
-            fig = estilizar_fig(fig, altura=460)
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    st.markdown("---")
-    st.markdown("**Próximos entregáveis no período**")
-    entregaveis = no_periodo[no_periodo["eh_entregavel"]].sort_values("prazo")
-    if entregaveis.empty:
-        st.info("Sem entregáveis no período filtrado.")
-    else:
-        st.dataframe(
-            entregaveis[["prazo", "projeto", "sub_projeto", "atividade", "responsaveis", "status"]].rename(
-                columns={"prazo": "Prazo", "projeto": "Projeto", "sub_projeto": "Subprojeto",
-                         "atividade": "Entregável", "responsaveis": "Responsáveis", "status": "Status"}),
-            use_container_width=True, hide_index=True,
-            column_config={"Prazo": st.column_config.DateColumn(format="DD/MM/YYYY")},
+        linhas_html += f"""
+        <div style="display:flex; align-items:center; margin-bottom:6px;">
+          <div style="width:170px; font-size:0.8rem; color:{TEXTO};
+                      padding-right:10px; text-align:right; flex-shrink:0;">
+            {proj}<br><span style="color:{TEXTO_DIM2}; font-size:0.7rem;">
+            {n_total} ativ · {n_entreg} entreg</span>
+          </div>
+          <div style="flex:1; position:relative; height:26px;
+                      background:{BG_CARD}; border-radius:3px;">
+            <div style="position:absolute; left:{ini_pct:.1f}%; width:{larg_pct:.1f}%;
+                        top:6px; height:14px; background:{AZUL_ESCURO};
+                        border-radius:3px;"></div>
+            {marcadores}
+          </div>
+        </div>
+        """
+
+    # linha "hoje"
+    hoje_pct = (hoje - ano_ini).days / total_dias * 100
+    linha_hoje = (
+        f'<div style="position:absolute; left:calc(170px + {hoje_pct:.1f}% '
+        f'* (100% - 170px) / 100); top:0; bottom:0; width:2px; '
+        f'background:{AZUL_CLARO}; opacity:0.6; z-index:3;"></div>'
+    )
+
+    html = f"""
+    <div style="background:{BG}; padding:14px; border-radius:6px;
+                border:1px solid {BORDA}; position:relative;">
+      <div style="display:flex; margin-bottom:8px;">
+        <div style="width:170px; flex-shrink:0;"></div>
+        <div style="flex:1; display:flex;">{header_meses}</div>
+      </div>
+      {linhas_html}
+    </div>
+    <div style="font-size:0.75rem; color:{TEXTO_DIM2}; margin-top:8px;">
+      ● Marcadores azuis = entregáveis críticos · Barra = período de atividades do projeto
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+
+# ============================================================
+# ABA 2 — Calendário mensal (HTML)
+# ============================================================
+def aba_calendario(df_at):
+    st.subheader("Calendário de Entregas")
+
+    com_data = df_at[df_at["prazo"].notna()].copy()
+    if com_data.empty:
+        st.info("Sem atividades com data no filtro atual.")
+        return
+
+    # Navegação de mês
+    if "cal_mes" not in st.session_state:
+        hoje = date.today()
+        st.session_state.cal_mes = hoje.month if hoje.year == 2026 else 1
+
+    c1, c2, c3 = st.columns([1, 3, 1])
+    with c1:
+        if st.button("← Anterior", use_container_width=True):
+            st.session_state.cal_mes = max(1, st.session_state.cal_mes - 1)
+    with c3:
+        if st.button("Próximo →", use_container_width=True):
+            st.session_state.cal_mes = min(12, st.session_state.cal_mes + 1)
+    with c2:
+        st.markdown(
+            f"<h3 style='text-align:center; margin:0;'>"
+            f"{MESES_PT_FULL[st.session_state.cal_mes - 1]} 2026</h3>",
+            unsafe_allow_html=True,
         )
 
+    mes = st.session_state.cal_mes
+    do_mes = com_data[(com_data["prazo"].dt.year == 2026) & (com_data["prazo"].dt.month == mes)]
 
-def view_pesquisador(df_resp, df_alocacao, df_pessoas, data_min, data_max):
-    st.subheader("Pesquisador")
+    # Montar grade do calendário
+    primeiro_dia, num_dias = cal_mod.monthrange(2026, mes)
+    # primeiro_dia: 0=segunda ... 6=domingo
+    dias_semana = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    header = "".join(
+        f'<div style="flex:1; text-align:center; font-size:0.75rem; '
+        f'color:{TEXTO_DIM2}; padding:4px 0; font-weight:600;">{d}</div>'
+        for d in dias_semana
+    )
+
+    hoje = date.today()
+    celulas = []
+    # espaços vazios antes do dia 1
+    for _ in range(primeiro_dia):
+        celulas.append('<div style="flex:1; min-height:90px;"></div>')
+
+    for dia in range(1, num_dias + 1):
+        entregas_dia = do_mes[do_mes["prazo"].dt.day == dia]
+        eh_hoje = (hoje.year == 2026 and hoje.month == mes and hoje.day == dia)
+        borda = f"2px solid {AZUL_CLARO}" if eh_hoje else f"1px solid {BORDA}"
+
+        itens = ""
+        for _, r in entregas_dia.head(4).iterrows():
+            cor = CORES_STATUS.get(r["status"], TEXTO_DIM)
+            marca = "◆ " if r["eh_entregavel"] else ""
+            itens += (
+                f'<div title="{r["atividade"][:80]}" style="font-size:0.65rem; '
+                f'background:{BG_HOVER}; border-left:2px solid {cor}; '
+                f'padding:1px 3px; margin-bottom:2px; border-radius:2px; '
+                f'white-space:nowrap; overflow:hidden; text-overflow:ellipsis; '
+                f'color:{TEXTO};">{marca}{r["atividade"][:22]}</div>'
+            )
+        if len(entregas_dia) > 4:
+            itens += (f'<div style="font-size:0.62rem; color:{TEXTO_DIM2};">'
+                      f'+{len(entregas_dia) - 4} mais</div>')
+
+        celulas.append(
+            f'<div style="flex:1; min-height:90px; border:{borda}; '
+            f'border-radius:3px; padding:3px; background:{BG_CARD}; '
+            f'margin:1px; overflow:hidden;">'
+            f'<div style="font-size:0.75rem; color:{TEXTO_DIM}; '
+            f'font-weight:600; margin-bottom:2px;">{dia}</div>{itens}</div>'
+        )
+
+    # quebrar em semanas (linhas de 7)
+    linhas = ""
+    for i in range(0, len(celulas), 7):
+        semana = celulas[i:i + 7]
+        while len(semana) < 7:
+            semana.append('<div style="flex:1;"></div>')
+        linhas += f'<div style="display:flex;">{"".join(semana)}</div>'
+
+    html = f"""
+    <div style="background:{BG}; padding:10px; border-radius:6px; border:1px solid {BORDA};">
+      <div style="display:flex; margin-bottom:4px;">{header}</div>
+      {linhas}
+    </div>
+    <div style="font-size:0.75rem; color:{TEXTO_DIM2}; margin-top:8px;">
+      ◆ = entregável crítico · Cor da borda do item = status
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+    st.metric("Entregas neste mês", len(do_mes))
+
+
+# ============================================================
+# ABA 3 — Equipe (mapa de calor pessoa × mês)
+# ============================================================
+def aba_equipe(df_aloc):
+    st.subheader("Equipe — Carga por Mês")
+    st.caption("Número de projetos simultâneos. Quanto mais claro, mais pulverizado.")
+
+    if df_aloc.empty:
+        st.info("Sem dados de alocação.")
+        return
+
+    pessoas = sorted(df_aloc["pessoa"].unique())
+    meses_ordem = ["Maio", "Junho", "Julho", "Agosto", "Setembro",
+                   "Outubro", "Novembro", "Dezembro"]
+
+    # cor da célula conforme nº de projetos
+    def cor_celula(n):
+        if n == 0:
+            return BG_CARD
+        if n <= 3:
+            return "#26456B"
+        if n <= 5:
+            return "#3D6A9E"
+        if n <= 7:
+            return "#5090D3"
+        return "#7BB3F0"
+
+    # cabeçalho
+    header = f'<div style="width:90px; flex-shrink:0;"></div>'
+    for m in meses_ordem:
+        header += (f'<div style="flex:1; text-align:center; font-size:0.7rem; '
+                   f'color:{TEXTO_DIM2}; padding:4px 0;">{m[:3]}</div>')
+
+    linhas = ""
+    for p in pessoas:
+        dp = df_aloc[df_aloc["pessoa"] == p]
+        celulas = (f'<div style="width:90px; flex-shrink:0; font-size:0.8rem; '
+                   f'color:{TEXTO}; padding-right:8px; text-align:right;">{p}</div>')
+        for m in meses_ordem:
+            linha_m = dp[dp["mes"] == m]
+            n = int(linha_m["n_projetos_no_mes"].iloc[0]) if not linha_m.empty else 0
+            cor = cor_celula(n)
+            txt_cor = BG if n > 5 else TEXTO_DIM
+            celulas += (f'<div style="flex:1; text-align:center; padding:8px 0; '
+                        f'margin:1px; background:{cor}; border-radius:3px; '
+                        f'font-size:0.8rem; color:{txt_cor}; font-weight:600;">'
+                        f'{n if n > 0 else ""}</div>')
+        linhas += f'<div style="display:flex; align-items:center; margin-bottom:2px;">{celulas}</div>'
+
+    html = f"""
+    <div style="background:{BG}; padding:12px; border-radius:6px; border:1px solid {BORDA};">
+      <div style="display:flex; margin-bottom:4px;">{header}</div>
+      {linhas}
+    </div>
+    <div style="font-size:0.75rem; color:{TEXTO_DIM2}; margin-top:8px;">
+      Número = projetos simultâneos no mês · 6+ projetos indica pulverização
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+
+# ============================================================
+# ABA 4 — Pesquisador individual
+# ============================================================
+def aba_pesquisador(df_resp, df_aloc, df_pessoas):
+    st.subheader("Visão por Pesquisador")
+
     pessoas_lista = df_pessoas["pessoa"].sort_values().tolist()
     pessoa = st.selectbox("Pesquisador(a)", pessoas_lista)
 
-    aloc_pessoa = df_alocacao[df_alocacao["pessoa"] == pessoa].sort_values("data_mes").copy()
-    if not aloc_pessoa.empty:
-        carga_sem = aloc_pessoa["carga_horaria_semanal"].iloc[0]
-        media_proj = aloc_pessoa["n_projetos_no_mes"].mean()
-        max_proj = aloc_pessoa["n_projetos_no_mes"].max()
-        pico_mes = aloc_pessoa.loc[aloc_pessoa["n_projetos_no_mes"].idxmax(), "mes"]
-
+    aloc_p = df_aloc[df_aloc["pessoa"] == pessoa].sort_values("data_mes")
+    if not aloc_p.empty:
+        carga = aloc_p["carga_horaria_semanal"].iloc[0]
+        media = aloc_p["n_projetos_no_mes"].mean()
+        pico = aloc_p["n_projetos_no_mes"].max()
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Dedicação", f"{carga_sem:.0f}h/sem")
-        c2.metric("Média projetos/mês", f"{media_proj:.1f}")
-        c3.metric("Pico de projetos", int(max_proj), help=f"em {pico_mes}")
-        n_at = (df_resp[df_resp["responsavel"] == pessoa]["status"] != "Concluído").sum()
-        c4.metric("Atividades em aberto", int(n_at))
+        c1.metric("Dedicação", f"{carga:.0f}h/sem")
+        c2.metric("Média projetos/mês", f"{media:.1f}")
+        c3.metric("Pico de projetos", int(pico))
+        n_aberto = (df_resp[df_resp["responsavel"] == pessoa]["status"] != "Concluído").sum()
+        c4.metric("Atividades em aberto", int(n_aberto))
 
         st.markdown("---")
         st.markdown("**Projetos simultâneos por mês**")
 
         def cor_n(n):
-            if n >= 8: return AZUL_CLARO
-            if n >= 6: return AZUL
+            if n >= 8:
+                return AZUL_CLARO
+            if n >= 6:
+                return AZUL
             return AZUL_ESCURO
 
-        cores = [cor_n(n) for n in aloc_pessoa["n_projetos_no_mes"]]
         fig = go.Figure()
         fig.add_trace(go.Bar(
-            x=aloc_pessoa["mes"], y=aloc_pessoa["n_projetos_no_mes"],
-            marker_color=cores, text=aloc_pessoa["n_projetos_no_mes"],
-            textposition="outside", textfont=dict(color=TEXTO),
-            hovertemplate="<b>%{x}</b><br>Projetos: %{y}<extra></extra>",
+            x=aloc_p["mes"], y=aloc_p["n_projetos_no_mes"],
+            marker_color=[cor_n(n) for n in aloc_p["n_projetos_no_mes"]],
+            text=aloc_p["n_projetos_no_mes"], textposition="outside",
+            textfont=dict(color=TEXTO),
+            hovertemplate="<b>%{x}</b><br>%{y} projetos<extra></extra>",
         ))
-        fig.update_layout(yaxis_title="", xaxis_title="", showlegend=False)
-        fig = estilizar_fig(fig, altura=320)
+        fig.update_layout(
+            height=300, margin=dict(t=20, b=20, l=10, r=10),
+            paper_bgcolor=BG, plot_bgcolor=BG,
+            font=dict(color=TEXTO_DIM), showlegend=False,
+            xaxis=dict(gridcolor=BORDA), yaxis=dict(gridcolor=BORDA),
+        )
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    else:
+        st.info(f"{pessoa} não está na planilha de alocação.")
 
     st.markdown("---")
     st.markdown(f"**Atividades de {pessoa}**")
-    at_pessoa = df_resp[df_resp["responsavel"] == pessoa].copy()
-    at_com_data = at_pessoa[at_pessoa["prazo"].notna()]
-
-    if at_com_data.empty:
+    at_p = df_resp[df_resp["responsavel"] == pessoa].copy()
+    at_p = at_p[at_p["prazo"].notna()].sort_values("prazo")
+    if at_p.empty:
         st.info(f"{pessoa} não tem atividades com data atribuídas.")
     else:
         st.dataframe(
-            at_com_data.sort_values("prazo")[
-                ["prazo", "projeto", "sub_projeto", "atividade", "status", "eh_entregavel"]
-            ].rename(columns={"prazo": "Prazo", "projeto": "Projeto", "sub_projeto": "Subprojeto",
-                              "atividade": "Atividade", "status": "Status", "eh_entregavel": "Entregável?"}),
+            at_p[["prazo", "projeto", "sub_projeto", "atividade", "status", "eh_entregavel"]].rename(
+                columns={"prazo": "Prazo", "projeto": "Projeto", "sub_projeto": "Subprojeto",
+                         "atividade": "Atividade", "status": "Status", "eh_entregavel": "Entregável?"}),
             use_container_width=True, hide_index=True,
             column_config={"Prazo": st.column_config.DateColumn(format="DD/MM/YYYY")},
         )
 
 
-def view_proximas_entregas(df_at, data_min, data_max):
-    st.subheader("Próximas Entregas")
-    st.caption("Entregas críticas agrupadas por urgência.")
-
-    entregaveis = df_at[df_at["eh_entregavel"] & df_at["prazo"].notna()].copy()
-    entregaveis_periodo = entregaveis[
-        (entregaveis["prazo"] >= data_min) & (entregaveis["prazo"] <= data_max)
-    ].sort_values("prazo")
-
-    if entregaveis_periodo.empty:
-        st.info("Nenhum entregável crítico no período.")
-        return
-
-    hoje = pd.Timestamp(date.today())
-    atrasados = entregaveis_periodo[(entregaveis_periodo["prazo"] < hoje) & (entregaveis_periodo["status"] != "Concluído")]
-    proximos_7 = entregaveis_periodo[(entregaveis_periodo["prazo"] >= hoje) & (entregaveis_periodo["prazo"] <= hoje + pd.Timedelta(days=7))]
-    proximos_30 = entregaveis_periodo[(entregaveis_periodo["prazo"] > hoje + pd.Timedelta(days=7)) & (entregaveis_periodo["prazo"] <= hoje + pd.Timedelta(days=30))]
-    futuros = entregaveis_periodo[entregaveis_periodo["prazo"] > hoje + pd.Timedelta(days=30)]
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Atrasados", len(atrasados))
-    c2.metric("Próx. 7 dias", len(proximos_7))
-    c3.metric("Próx. 30 dias", len(proximos_30))
-    c4.metric("Depois", len(futuros))
-
-    st.markdown("---")
-
-    def mostrar_bloco(titulo, df, limite=15):
-        if df.empty: return
-        st.markdown(f"**{titulo}** ({len(df)})")
-        df_mostrar = df.head(limite)
-        for _, row in df_mostrar.iterrows():
-            dias = (row["prazo"] - hoje).days
-            if dias < 0:
-                dias_txt = f"<b>{abs(dias)} dias atrasado</b>"
-            elif dias == 0:
-                dias_txt = "<b>hoje</b>"
-            else:
-                dias_txt = f"em {dias} dias"
-            cor = CORES_STATUS.get(row["status"], TEXTO_DIM)
-            resp_txt = row["responsaveis"] if row["responsaveis"] else "<i>sem responsável</i>"
-            st.markdown(f"""
-                <div style="border-left: 3px solid {cor}; padding: 10px 14px; margin-bottom: 8px;
-                            background: {BG_CARD}; border-radius: 4px;">
-                  <div style="font-size: 0.8rem; color: {TEXTO_DIM};">
-                    <b style="color: {TEXTO};">{row['prazo'].strftime('%d/%m/%Y')}</b>
-                    · {dias_txt} · <span style="color: {cor};">{row['status']}</span>
-                  </div>
-                  <div style="font-weight: 600; margin: 4px 0; color: {TEXTO};">{row['atividade']}</div>
-                  <div style="font-size: 0.85rem; color: {TEXTO_DIM};">
-                    <i>{row['projeto']}</i> — {row['sub_projeto']}<br>{resp_txt}
-                  </div>
-                </div>
-            """, unsafe_allow_html=True)
-        if len(df) > limite:
-            st.caption(f"...e mais {len(df) - limite} item(ns).")
-        st.markdown("")
-
-    mostrar_bloco("Atrasados", atrasados)
-    mostrar_bloco("Próximos 7 dias", proximos_7)
-    mostrar_bloco("Próximos 30 dias", proximos_30)
-    mostrar_bloco("Mais à frente", futuros)
-
-
+# ============================================================
+# Main
+# ============================================================
 def main():
     try:
-        df_at, df_resp, df_alocacao, df_pessoas = carregar_dados()
+        df_at, df_resp, df_aloc, df_pessoas = carregar_dados()
     except FileNotFoundError:
         st.error("Planilha mestra não encontrada.")
         st.stop()
 
-    df_at_f, df_resp_f, data_min, data_max = aplicar_filtros_globais(df_at, df_resp)
+    escopo, projs = sidebar_filtros(df_at)
+    df_at_f = filtrar(df_at, escopo, projs)
+    df_resp_f = df_resp[df_resp["projeto"].isin(projs)].copy()
+    if escopo == "Só entregáveis críticos":
+        df_resp_f = df_resp_f[df_resp_f["eh_entregavel"]]
 
-    tab1, tab2, tab3 = st.tabs(["Portfólio", "Pesquisador", "Próximas Entregas"])
+    tab1, tab2, tab3, tab4 = st.tabs(
+        ["Visão Geral", "Calendário", "Equipe", "Pesquisador"])
     with tab1:
-        view_portfolio(df_at_f, data_min, data_max)
+        aba_gantt(df_at_f)
     with tab2:
-        view_pesquisador(df_resp_f, df_alocacao, df_pessoas, data_min, data_max)
+        aba_calendario(df_at_f)
     with tab3:
-        view_proximas_entregas(df_at_f, data_min, data_max)
+        aba_equipe(df_aloc)
+    with tab4:
+        aba_pesquisador(df_resp_f, df_aloc, df_pessoas)
 
 
 if __name__ == "__main__":
