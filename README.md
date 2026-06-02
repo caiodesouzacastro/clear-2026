@@ -1,83 +1,64 @@
 # CLEAR 2026 — Dashboard de Organização e Alocação
 
-App Streamlit pra visualizar o portfólio de projetos, alocação de pesquisadores e linha de chegada (entregas críticas) do FGV CLEAR em 2026.
+## 🔗 Acesse o painel
 
-## Estrutura
+**👉 [https://clear-2026-ahhtunccmwdbxx5nmfxpbb.streamlit.app](https://clear-2026-ahhtunccmwdbxx5nmfxpbb.streamlit.app)**
+
+App Streamlit para visualizar o portfólio de projetos, alocação de pesquisadores e próximas entregas do FGV CLEAR em 2026.
+
+---
+
+## Estrutura do repositório
 
 ```
 clear-2026/
 ├── app.py                     # App Streamlit
 ├── CLEAR_Master_2026.xlsx     # Fonte única de dados (editável)
+├── config.toml                # Tema visual
 ├── requirements.txt
 └── README.md
 ```
 
-A planilha mestra é a **única fonte de dados**. Editou a planilha → o app reflete.
+A planilha mestra é a **única fonte de dados**. Editou a planilha → o app reflete em 1-2 minutos.
 
-## Rodar localmente
+## As 4 abas
+
+### 📊 Visão Geral
+Linha do tempo (Gantt) por projeto, marcadores de entregáveis e KPIs. Pergunta: *como está distribuído o ano?*
+
+### 📅 Calendário
+Grade mensal navegável com as entregas do mês. Pergunta: *o que acontece este mês?*
+
+### 👥 Equipe
+Mapa de carga — pessoas × meses, intensidade pelo número de projetos simultâneos. Pergunta: *quem está sobrecarregado?*
+
+### 👤 Pesquisador
+A fundo numa pessoa: capacidade, projetos simultâneos, atividades atribuídas. Pergunta: *qual é a carga desta pessoa?*
+
+## Filtros (sidebar)
+
+- **Mostrar**: só entregáveis críticos ou todas as atividades
+- **Projetos**: subset do portfólio
+
+## Como atualizar os dados
+
+1. Cada projeto preenche seu cronograma (modelo padrão `Modelo_Cronograma_CLEAR_2026.xlsx`)
+2. Uma pessoa junta todos os cronogramas no Claude usando `PROMPT_gerar_planilha.md` e gera o novo `CLEAR_Master_2026.xlsx`
+3. Sobe o arquivo no GitHub substituindo o atual — o painel atualiza sozinho
+
+Detalhes no arquivo `COMO_ATUALIZAR.md`.
+
+## 16 pessoas CLEAR (nomes canônicos)
+
+Bia B, Bia S, Caio, Carol, Cecilia, Fabrícia, Julia, Junior, Lorena, Luan, Luigi, Lycia, Michel, Pleno, Samu, Senior
+
+## Rodar localmente (dev)
 
 ```bash
-# 1. Clonar repositório
-git clone <url-do-repo>
+git clone https://github.com/caiodesouzacastro/clear-2026
 cd clear-2026
-
-# 2. Criar ambiente (opcional mas recomendado)
-python -m venv .venv
-source .venv/bin/activate    # Linux/Mac
-# .venv\Scripts\activate     # Windows
-
-# 3. Instalar dependências
 pip install -r requirements.txt
-
-# 4. Rodar
 streamlit run app.py
 ```
 
 Abre em `http://localhost:8501`.
-
-## Hospedar grátis (Streamlit Community Cloud)
-
-1. Faça push do repositório pro GitHub (público ou privado)
-2. Entre em https://share.streamlit.io
-3. "New app" → selecione o repo → arquivo principal: `app.py`
-4. Deploy
-
-A cada push novo no GitHub, o app atualiza automaticamente.
-
-## As 3 visões
-
-### 📊 Portfólio
-Visão executiva do portfólio inteiro: heatmap de densidade de atividades por projeto × mês, timeline de atividades, lista de próximos entregáveis. Pergunta que responde: *o portfólio está saudável?*
-
-### 👤 Pesquisador
-Pra cada pessoa CLEAR: gráfico de ocupação mensal (% da capacidade alocada), timeline de atividades sob responsabilidade, tabela detalhada. Pergunta: *quem está sobrecarregado?*
-
-### 🏁 Linha de Chegada
-Calendário de entregas críticas agrupado por urgência (atrasados → 7 dias → 30 dias → depois). Pergunta: *o que preciso despachar essa semana?*
-
-## Filtros (sidebar)
-
-- **Período**: próximas 4 semanas, 3 meses, resto do ano ou tudo
-- **Projetos**: subset do portfólio
-- **Status**: Concluído, Em Andamento, Não Iniciado, Atrasado, Reunião
-
-## Manutenção dos dados
-
-A aba `Atividades` da planilha mestra tem as colunas:
-
-| Campo | Descrição |
-|---|---|
-| `id_atividade` | ID único (ACT0001...) |
-| `projeto` | Projeto pai |
-| `sub_projeto` | Subdivisão (módulo, etapa) |
-| `atividade` | Descrição |
-| `responsaveis` | Pessoas CLEAR separadas por `;` (use os nomes canônicos da aba `Pessoas`) |
-| `prazo` | Data limite |
-| `status` | `Concluído` / `Em Andamento` / `Não Iniciado` / `Atrasado` / `Reunião` |
-| `eh_entregavel` | `TRUE` para entregáveis críticos (aparecem na Linha de Chegada) |
-
-**Para adicionar uma atividade nova:** continue a numeração de `id_atividade`, preencha os campos, salve.
-
-## 18 pessoas CLEAR (nomes canônicos)
-
-Bia B, Bia S, Caio, Carol, Cecilia, Fabrícia, Julia, Junior, Lorena, Luan, Luiggi, Lycia, Michel, PMO, Pleno, Samu, Senior, Zinho
