@@ -245,6 +245,10 @@ def aba_gantt(df_at):
     st.subheader("Visão Geral do Ano")
 
     com_data = df_at[df_at["prazo"].notna()].copy()
+    # Mantém só o ano do painel (2026) — remove resíduos de 2025 (e 2027) que
+    # ficavam espremidos nas bordas e poluíam a linha do tempo.
+    com_data = com_data[(com_data["prazo"] >= pd.Timestamp("2026-01-01")) &
+                        (com_data["prazo"] <= pd.Timestamp("2026-12-31"))]
     hoje = pd.Timestamp(date.today())
 
     # KPIs
@@ -321,6 +325,8 @@ def aba_calendario(df_at):
     st.subheader("Calendário de Entregas")
 
     com_data = df_at[df_at["prazo"].notna()].copy()
+    com_data = com_data[(com_data["prazo"] >= pd.Timestamp("2026-01-01")) &
+                        (com_data["prazo"] <= pd.Timestamp("2026-12-31"))]
     if com_data.empty:
         st.info("Sem atividades com data no filtro atual.")
         return
