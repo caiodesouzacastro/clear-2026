@@ -7,6 +7,7 @@ Gantt e calendário em HTML puro (sem Plotly) para carregar rápido.
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import date
@@ -45,6 +46,84 @@ MESES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
             "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
 MESES_PT_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
                  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+
+# Paleta categórica (legível sobre o navy) — usada nos Gantts de alocação
+PALETA = ["#5090D3", "#5DCAA5", "#E5A84B", "#C77DD6", "#E57373", "#7FB8E6",
+          "#9CCC65", "#F0A868", "#64B6AC", "#B39DDB", "#4FC3F7", "#FF8A65",
+          "#A1C181", "#E8A0BF", "#76C7C0", "#D4A55E"]
+
+
+def _esc(s):
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def _trunc(s, n):
+    s = str(s)
+    return s if len(s) <= n else s[:n - 1] + "…"
+
+
+def render_gantt(groups, color_map, m_min, m_max, eixo_label):
+    """Gera um Gantt em SVG. groups: lista de (rótulo, [(sub, de, ate)])."""
+    PAD, HDR, NAME_W, COL_W = 12, 40, 180, 64
+    BAR_H, BAR_GAP, ROW_PAD, MIN_ROW = 13, 3, 8, 32
+    months = list(range(m_min, m_max + 1))
+    nM = len(months)
+    row_h = [max(MIN_ROW, len(it) * (BAR_H + BAR_GAP) + ROW_PAD) for _, it in groups]
+    total_h = HDR + sum(row_h) + PAD
+    total_w = NAME_W + nM * COL_W + PAD * 2
+
+    def xm(m):
+        return PAD + NAME_W + (m - m_min) * COL_W
+
+    s = [f'<svg viewBox="0 0 {total_w} {total_h}" xmlns="http://www.w3.org/2000/svg" '
+         f'style="width:100%;height:auto;font-family:-apple-system,Segoe UI,sans-serif;">']
+    s.append(f'<rect width="{total_w}" height="{total_h}" fill="{BG_CARD}" rx="6"/>')
+    for i, m in enumerate(months):
+        x = xm(m)
+        if i % 2 == 0:
+            s.append(f'<rect x="{x}" y="{HDR}" width="{COL_W}" height="{total_h - HDR - PAD}" '
+                     f'fill="rgba(255,255,255,0.025)"/>')
+        s.append(f'<text x="{x + COL_W / 2}" y="24" text-anchor="middle" font-size="11" '
+                 f'fill="{TEXTO_DIM2}">{MESES_PT[m - 1]}</text>')
+        s.append(f'<line x1="{x}" y1="30" x2="{x}" y2="{total_h - PAD}" '
+                 f'stroke="{BORDA}" stroke-width="0.5"/>')
+    xend = PAD + NAME_W + nM * COL_W
+    s.append(f'<line x1="{xend}" y1="30" x2="{xend}" y2="{total_h - PAD}" stroke="{BORDA}" stroke-width="0.5"/>')
+    s.append(f'<line x1="{PAD + NAME_W}" y1="{HDR - 8}" x2="{PAD + NAME_W}" y2="{total_h - PAD}" '
+             f'stroke="{BORDA}" stroke-width="1"/>')
+    s.append(f'<text x="{PAD + 4}" y="24" font-size="11" fill="{TEXTO_DIM2}">{eixo_label}</text>')
+
+    y = HDR
+    for gi, ((label, items), rh) in enumerate(zip(groups, row_h)):
+        # faixa de fundo alternada (separa visualmente cada pessoa/projeto)
+        if gi % 2 == 1:
+            s.append(f'<rect x="{PAD}" y="{y}" width="{total_w - 2 * PAD}" height="{rh}" '
+                     f'fill="rgba(255,255,255,0.035)"/>')
+        # divisor superior do grupo (mais forte)
+        s.append(f'<line x1="{PAD}" y1="{y}" x2="{total_w - PAD}" y2="{y}" '
+                 f'stroke="{AZUL_ESCURO}" stroke-width="1"/>')
+        s.append(f'<text x="{PAD + 6}" y="{y + rh / 2 + 4}" font-size="12.5" fill="{TEXTO}" '
+                 f'font-weight="500">{_esc(_trunc(label, 26))}<title>{_esc(label)}</title></text>')
+        by = y + ROW_PAD / 2
+        for (sub, de, ate) in items:
+            cor = color_map.get(sub, AZUL)
+            bx = xm(de)
+            bw = (ate - de + 1) * COL_W - 4
+            s.append(f'<g><rect x="{bx + 2}" y="{by}" width="{max(bw, 8)}" height="{BAR_H}" '
+                     f'rx="3" fill="{cor}" opacity="0.92"/>'
+                     f'<title>{_esc(sub)} · {MESES_PT[de - 1]}–{MESES_PT[ate - 1]}</title>')
+            if bw >= 46:
+                s.append(f'<text x="{bx + 8}" y="{by + BAR_H - 3}" font-size="10.5" fill="{BG}" '
+                         f'font-weight="600">{_esc(_trunc(sub, int(bw / 7)))}</text>')
+            s.append('</g>')
+            by += BAR_H + BAR_GAP
+        y += rh
+    # divisor de fechamento
+    s.append(f'<line x1="{PAD}" y1="{y}" x2="{total_w - PAD}" y2="{y}" '
+             f'stroke="{AZUL_ESCURO}" stroke-width="1"/>')
+    s.append('</svg>')
+    return "".join(s), total_h
 
 # ============================================================
 # CSS — tema escuro Bloomberg
@@ -112,13 +191,16 @@ def carregar_dados():
     resp = pd.read_excel(MASTER_FILE, sheet_name="Resp_Atividade")
     aloc = pd.read_excel(MASTER_FILE, sheet_name="Alocacao")
     pes = pd.read_excel(MASTER_FILE, sheet_name="Pessoas")
+    gantt = pd.read_excel(MASTER_FILE, sheet_name="Alocacao_Gantt")
+    gantt["mes_de"] = gantt["mes_de"].astype(int)
+    gantt["mes_ate"] = gantt["mes_ate"].astype(int)
     at["prazo"] = pd.to_datetime(at["prazo"], errors="coerce")
     resp["prazo"] = pd.to_datetime(resp["prazo"], errors="coerce")
     aloc["data_mes"] = pd.to_datetime(aloc["data_mes"], errors="coerce")
     at["eh_entregavel"] = at["eh_entregavel"].fillna(False).astype(bool)
     resp["eh_entregavel"] = resp["eh_entregavel"].fillna(False).astype(bool)
     at["responsaveis"] = at["responsaveis"].fillna("")
-    return at, resp, aloc, pes
+    return at, resp, aloc, pes, gantt
 
 
 # ============================================================
@@ -454,11 +536,75 @@ def aba_pesquisador(df_resp, df_aloc, df_pessoas):
 
 
 # ============================================================
+# ABA 5 — Alocação (Gantt por pessoa × projeto)
+# ============================================================
+def aba_alocacao(df_gantt):
+    st.subheader("Alocação — Quem está em quê, e quando")
+    st.caption("Período de cada pessoa em cada frente. Fonte: alocação nova + envolvimento do master.")
+
+    if df_gantt.empty:
+        st.info("Sem dados de alocação.")
+        return
+
+    m_lo, m_hi = int(df_gantt["mes_de"].min()), int(df_gantt["mes_ate"].max())
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        vis = st.radio("Visão", ["Por pessoa", "Por projeto"], horizontal=True)
+    with c2:
+        if m_hi > m_lo:
+            faixa = st.slider("Meses", m_lo, m_hi, (m_lo, m_hi),
+                              format="%d", help="Filtra a janela de meses exibida")
+        else:
+            faixa = (m_lo, m_hi)
+    m_min, m_max = faixa
+
+    # mantém só quem cruza a janela escolhida
+    d = df_gantt[(df_gantt["mes_ate"] >= m_min) & (df_gantt["mes_de"] <= m_max)].copy()
+    d["mes_de"] = d["mes_de"].clip(lower=m_min)
+    d["mes_ate"] = d["mes_ate"].clip(upper=m_max)
+
+    pessoas = sorted(d["pessoa"].unique())
+    projetos = sorted(d["projeto"].unique())
+    cor_pessoa = {p: PALETA[i % len(PALETA)] for i, p in enumerate(pessoas)}
+    cor_proj = {p: PALETA[i % len(PALETA)] for i, p in enumerate(projetos)}
+
+    if vis == "Por pessoa":
+        groups = []
+        for p in pessoas:
+            dd = d[d["pessoa"] == p].sort_values("mes_de")
+            groups.append((p, [(r.projeto, int(r.mes_de), int(r.mes_ate)) for r in dd.itertuples()]))
+        svg, h = render_gantt(groups, cor_proj, m_min, m_max, "Pessoa")
+    else:
+        groups = []
+        for p in projetos:
+            dd = d[d["projeto"] == p].sort_values("mes_de")
+            groups.append((p, [(r.pessoa, int(r.mes_de), int(r.mes_ate)) for r in dd.itertuples()]))
+        svg, h = render_gantt(groups, cor_pessoa, m_min, m_max, "Projeto")
+
+    components.html(
+        f'<div style="background:{BG};">{svg}</div>',
+        height=int(h) + 16, scrolling=False,
+    )
+
+    # carga: pico de frentes simultâneas por pessoa
+    st.markdown("**Pico de frentes simultâneas (no período exibido)**")
+    pico = {}
+    for p in pessoas:
+        dd = d[d["pessoa"] == p]
+        pk = max((int(((dd["mes_de"] <= m) & (dd["mes_ate"] >= m)).sum())
+                  for m in range(m_min, m_max + 1)), default=0)
+        pico[p] = pk
+    cols = st.columns(min(len(pessoas), 7) or 1)
+    for i, p in enumerate(sorted(pico, key=lambda x: -pico[x])):
+        cols[i % len(cols)].metric(p, pico[p])
+
+
+# ============================================================
 # Main
 # ============================================================
 def main():
     try:
-        df_at, df_resp, df_aloc, df_pessoas = carregar_dados()
+        df_at, df_resp, df_aloc, df_pessoas, df_gantt = carregar_dados()
     except FileNotFoundError:
         st.error("Planilha mestra não encontrada.")
         st.stop()
@@ -469,15 +615,17 @@ def main():
     if escopo == "Só entregáveis críticos":
         df_resp_f = df_resp_f[df_resp_f["eh_entregavel"]]
 
-    tab1, tab2, tab3, tab4 = st.tabs(
-        ["Visão Geral", "Calendário", "Equipe", "Pesquisador"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
+        ["Visão Geral", "Calendário", "Alocação", "Equipe", "Pesquisador"])
     with tab1:
         aba_gantt(df_at_f)
     with tab2:
         aba_calendario(df_at_f)
     with tab3:
-        aba_equipe(df_aloc)
+        aba_alocacao(df_gantt)
     with tab4:
+        aba_equipe(df_aloc)
+    with tab5:
         aba_pesquisador(df_resp_f, df_aloc, df_pessoas)
 
 
