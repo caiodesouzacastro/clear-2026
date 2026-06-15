@@ -76,8 +76,10 @@ def render_gantt(groups, color_map, m_min, m_max, eixo_label):
     def xm(m):
         return PAD + NAME_W + (m - m_min) * COL_W
 
-    s = [f'<svg viewBox="0 0 {total_w} {total_h}" xmlns="http://www.w3.org/2000/svg" '
-         f'style="width:100%;height:auto;font-family:-apple-system,Segoe UI,sans-serif;">']
+    s = [f'<svg viewBox="0 0 {total_w} {total_h}" width="{total_w}" height="{total_h}" '
+         f'xmlns="http://www.w3.org/2000/svg" '
+         f'style="max-width:100%;height:auto;display:block;margin:0 auto;'
+         f'font-family:-apple-system,Segoe UI,sans-serif;">']
     s.append(f'<rect width="{total_w}" height="{total_h}" fill="{BG_CARD}" rx="6"/>')
     for i, m in enumerate(months):
         x = xm(m)
@@ -588,8 +590,8 @@ def aba_alocacao(df_gantt):
         svg, h = render_gantt(groups, cor_pessoa, m_min, m_max, "Projeto")
 
     components.html(
-        f'<div style="background:{BG};">{svg}</div>',
-        height=int(h) + 16, scrolling=False,
+        f'<div style="background:{BG};margin:0;padding:0;">{svg}</div>',
+        height=int(h) + 24, scrolling=False,
     )
 
     # carga: pico de frentes simultâneas por pessoa
