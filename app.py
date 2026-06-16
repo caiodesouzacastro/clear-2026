@@ -20,6 +20,46 @@ import calendar as cal_mod
 st.set_page_config(page_title="CLEAR 2026", page_icon="📊", layout="wide",
                    initial_sidebar_state="expanded")
 
+
+# ============================================================
+# Autenticação (senha simples via st.secrets)
+# ============================================================
+def _check_password():
+    """Tela de senha. Senha vai em .streamlit/secrets.toml como app_password."""
+    if st.session_state.get("auth_ok"):
+        return True
+
+    # Lê a senha do secrets (Streamlit Cloud) ou variável de ambiente local
+    try:
+        senha_correta = st.secrets["app_password"]
+    except Exception:
+        import os
+        senha_correta = os.environ.get("APP_PASSWORD", "")
+
+    # Centraliza a tela de login
+    _, c, _ = st.columns([1, 1, 1])
+    with c:
+        st.markdown(
+            "<div style='margin-top:80px;text-align:center;'>"
+            "<h2 style='color:#5090D3;margin-bottom:4px;'>CLEAR 2026</h2>"
+            "<p style='color:#B2BAC2;font-size:14px;margin-top:0;'>"
+            "Painel de portfólio · acesso restrito</p></div>",
+            unsafe_allow_html=True,
+        )
+        senha = st.text_input("Senha", type="password",
+                              label_visibility="collapsed",
+                              placeholder="Digite a senha")
+        if senha:
+            if senha == senha_correta:
+                st.session_state["auth_ok"] = True
+                st.rerun()
+            else:
+                st.error("Senha incorreta.")
+    st.stop()
+
+
+_check_password()
+
 MASTER_FILE = Path(__file__).parent / "CLEAR_Master_2026.xlsx"
 
 # Paleta Bloomberg dark
@@ -601,26 +641,40 @@ def aba_farol(df_aloc):
     except Exception:
         farol_manual = None
 
-    # ── Caso contrário, calcula da alocação automática (escala 1-3) ──
     MES_NUM = {m: i + 1 for i, m in enumerate(MESES_PT_FULL)}
-    aloc = df_aloc.copy()
-    aloc["mnum"] = aloc["mes"].map(MES_NUM)
-    aloc = aloc.dropna(subset=["mnum", "pessoa"])
-    aloc = aloc[aloc["pessoa"].notna() & (aloc["pessoa"] != "PMO")]
 
-    pivot = (aloc.groupby(["pessoa", "mnum"])["projeto_alocacao"]
-             .nunique().reset_index()
-             .rename(columns={"projeto_alocacao": "n_proj"}))
+    # Se temos o farol manual preenchido, pulamos o cálculo automático
+    if farol_manual is not None and not farol_manual.empty:
+        pivot = pd.DataFrame(columns=["pessoa", "mnum", "nivel"])
+    else:
+        aloc = df_aloc.copy()
+        aloc["mnum"] = aloc["mes"].map(MES_NUM)
+        aloc = aloc.dropna(subset=["mnum", "pessoa"])
+        aloc = aloc[aloc["pessoa"].notna() & (aloc["pessoa"] != "PMO")]
 
-    # Mapeia número de projetos -> escala 1-3 (heurística)
-    def to_escala(n):
-        if n == 0: return 0
-        if n == 1: return 1
-        if n <= 3: return 2
-        return 3
+        # A aba Alocacao já traz 'n_projetos_no_mes' pré-calculado
+        if "n_projetos_no_mes" in aloc.columns:
+            pivot = aloc[["pessoa", "mnum", "n_projetos_no_mes"]].rename(
+                columns={"n_projetos_no_mes": "n_proj"}).copy()
+        elif "projeto_alocacao" in aloc.columns:
+            pivot = (aloc.groupby(["pessoa", "mnum"])["projeto_alocacao"]
+                     .nunique().reset_index()
+                     .rename(columns={"projeto_alocacao": "n_proj"}))
+        else:
+            pivot = pd.DataFrame(columns=["pessoa", "mnum", "n_proj"])
 
-    pivot["nivel"] = pivot["n_proj"].apply(to_escala)
-    pessoas = sorted(pivot["pessoa"].unique())
+        # Mapeia número de projetos -> escala 1-3 (heurística)
+        def to_escala(n):
+            if n == 0: return 0
+            if n == 1: return 1
+            if n <= 3: return 2
+            return 3
+        if not pivot.empty:
+            pivot["nivel"] = pivot["n_proj"].apply(to_escala)
+        else:
+            pivot["nivel"] = pd.Series(dtype=int)
+
+    pessoas = sorted(pivot["pessoa"].unique()) if not pivot.empty else []
     meses = list(range(1, 13))
 
     fonte_label = "Auto-calculado a partir da alocação"
