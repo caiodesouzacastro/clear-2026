@@ -16,7 +16,7 @@
 | **Visão Geral** | Gantt por projeto com % concluído, filtro de projetos, marcadores de entregáveis |
 | **Calendário** | Grade mensal com todas as atividades e entregáveis do mês |
 | **Alocação** | Gantt por pessoa ou por projeto (quem está em quê, e quando) — com filtros de pessoa e projeto |
-| **Farol** | Heatmap pessoa × mês mostrando intensidade de carga (verde / âmbar / vermelho) |
+| **Farol** | Percepção de carga por pessoa × mês (1 = tranquilo, 2 = ok, 3 = sobrecarga). Auto-declarado pela equipe (ou calculado da alocação como fallback) |
 | **Equipe** | Heatmap de horas por pessoa × mês |
 | **Pesquisador** | Visão individual: gráfico de carga + lista de atividades |
 

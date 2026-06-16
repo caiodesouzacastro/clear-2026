@@ -573,12 +573,29 @@ def aba_pesquisador(df_resp, df_aloc, df_pessoas):
 # ============================================================
 def aba_farol(df_aloc):
     st.subheader("Farol de Intensidade — Carga por Pessoa")
-    st.caption("Número de projetos simultâneos por pessoa, mês a mês. Vermelho = sobrecarga, verde = ok.")
+    st.caption("Percepção de carga de trabalho por pessoa, mês a mês. "
+               "1 = tranquilo · 2 = ok · 3 = sobrecarga.")
 
     if df_aloc.empty:
         st.info("Sem dados de alocação.")
         return
 
+    # ── Tenta ler o Farol_Intensidade preenchido (auto-declaração) ───
+    farol_manual = None
+    try:
+        farol_manual = pd.read_excel("Farol_Intensidade_CLEAR_2026.xlsx",
+                                     sheet_name="Farol de Intensidade",
+                                     header=3)
+        # remove colunas vazias e a linha de "TOTAL EQUIPE"
+        farol_manual = farol_manual.dropna(how="all")
+        if "Pessoa" in farol_manual.columns:
+            farol_manual = farol_manual[farol_manual["Pessoa"].notna()]
+            farol_manual = farol_manual[~farol_manual["Pessoa"].astype(str)
+                                        .str.contains("TOTAL", case=False, na=False)]
+    except Exception:
+        farol_manual = None
+
+    # ── Caso contrário, calcula da alocação automática (escala 1-3) ──
     MES_NUM = {m: i + 1 for i, m in enumerate(MESES_PT_FULL)}
     aloc = df_aloc.copy()
     aloc["mnum"] = aloc["mes"].map(MES_NUM)
@@ -589,20 +606,32 @@ def aba_farol(df_aloc):
              .nunique().reset_index()
              .rename(columns={"projeto_alocacao": "n_proj"}))
 
+    # Mapeia número de projetos -> escala 1-3 (heurística)
+    def to_escala(n):
+        if n == 0: return 0
+        if n == 1: return 1
+        if n <= 3: return 2
+        return 3
+
+    pivot["nivel"] = pivot["n_proj"].apply(to_escala)
     pessoas = sorted(pivot["pessoa"].unique())
     meses = list(range(1, 13))
 
-    # Thresholds
-    def cor_farol(n):
-        if n == 0:   return BG_CARD, TEXTO_DIM2
-        if n <= 2:   return "#1a3d2b", "#5a9367"   # verde escuro / texto verde
-        if n <= 4:   return "#2d2a14", "#d99a2b"   # âmbar
-        return "#2d1414", "#d9534f"                 # vermelho
+    fonte_label = "Auto-calculado a partir da alocação"
+    if farol_manual is not None and not farol_manual.empty:
+        fonte_label = "Preenchido pela equipe (auto-declaração)"
+
+    st.caption(f"📊 Fonte: {fonte_label}")
+
+    # Cor por nível (1-3)
+    def cor_nivel(nivel):
+        if nivel == 0: return BG_CARD, TEXTO_DIM2, ""
+        if nivel == 1: return "#1a3d2b", "#5a9367", "🟢"  # tranquilo
+        if nivel == 2: return "#2d2a14", "#d99a2b", "🟡"  # ok
+        return "#2d1414", "#d9534f", "🔴"                  # sobrecarga
 
     # Tabela HTML
-    col_w = 62
-    name_w = 130
-    row_h = 44
+    col_w = 62; name_w = 130; row_h = 44
 
     header_cells = "".join(
         f'<th style="width:{col_w}px;min-width:{col_w}px;text-align:center;'
@@ -618,24 +647,43 @@ def aba_farol(df_aloc):
         f'{header_cells}</tr></thead><tbody>'
     )
 
+    # Função pra pegar o nível de uma pessoa em um mês
+    MES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun",
+                 "Jul","Ago","Set","Out","Nov","Dez"]
+    def nivel_de(pessoa, m):
+        if farol_manual is not None and "Pessoa" in farol_manual.columns:
+            linha = farol_manual[farol_manual["Pessoa"] == pessoa]
+            if not linha.empty:
+                col = MES_ABREV[m-1]
+                if col in linha.columns:
+                    v = linha[col].iloc[0]
+                    if pd.notna(v):
+                        try: return int(v)
+                        except: return 0
+            return 0
+        sub = pivot[(pivot["pessoa"] == pessoa) & (pivot["mnum"] == m)]
+        return int(sub["nivel"].iloc[0]) if not sub.empty else 0
+
+    # Lista canônica de pessoas (do manual se houver, senão do auto)
+    if farol_manual is not None and not farol_manual.empty and "Pessoa" in farol_manual.columns:
+        pessoas = sorted(farol_manual["Pessoa"].dropna().unique())
+
     for pi, pessoa in enumerate(pessoas):
         row_bg = "rgba(255,255,255,0.03)" if pi % 2 == 1 else "transparent"
         row = f'<tr style="background:{row_bg};">'
         row += (f'<td style="padding:6px 8px;font-size:13px;font-weight:500;'
                 f'color:{TEXTO};white-space:nowrap;">{pessoa}</td>')
         for m in meses:
-            sub = pivot[(pivot["pessoa"] == pessoa) & (pivot["mnum"] == m)]
-            n = int(sub["n_proj"].iloc[0]) if not sub.empty else 0
-            bg, fg = cor_farol(n)
-            icon = "🔴" if n >= 5 else ("🟡" if n >= 3 else ("🟢" if n >= 1 else ""))
+            nivel = nivel_de(pessoa, m)
+            bg, fg, icon = cor_nivel(nivel)
             row += (
                 f'<td style="text-align:center;padding:4px 2px;height:{row_h}px;">'
                 f'<div style="margin:auto;width:50px;height:34px;border-radius:6px;'
                 f'background:{bg};display:flex;flex-direction:column;'
                 f'align-items:center;justify-content:center;gap:0px;">'
-                f'<span style="font-size:15px;line-height:1;">{icon if n > 0 else "·"}</span>'
+                f'<span style="font-size:15px;line-height:1;">{icon if nivel > 0 else "·"}</span>'
                 f'<span style="font-size:11px;font-weight:700;color:{fg};line-height:1.2;">'
-                f'{n if n > 0 else ""}</span></div></td>'
+                f'{nivel if nivel > 0 else ""}</span></div></td>'
             )
         row += "</tr>"
         table += row
@@ -644,10 +692,10 @@ def aba_farol(df_aloc):
 
     legenda = (
         f'<div style="display:flex;gap:20px;margin-top:12px;font-size:12px;color:{TEXTO_DIM2};">'
-        f'<span>🟢 1–2 projetos — carga normal</span>'
-        f'<span>🟡 3–4 projetos — atenção</span>'
-        f'<span>🔴 5+ projetos — sobrecarga</span>'
-        f'<span style="opacity:.6;">· = sem alocação neste mês</span>'
+        f'<span>🟢 <b>1</b> — tranquilo</span>'
+        f'<span>🟡 <b>2</b> — ok</span>'
+        f'<span>🔴 <b>3</b> — sobrecarga</span>'
+        f'<span style="opacity:.6;">· = sem dados</span>'
         f'</div>'
     )
 
@@ -657,14 +705,18 @@ def aba_farol(df_aloc):
         unsafe_allow_html=True
     )
 
-    # Destaque: quem está em sobrecarga algum mês
-    sobrecarga = pivot[pivot["n_proj"] >= 5]
-    if not sobrecarga.empty:
+    # Destaque: quem está em sobrecarga (nível 3) em algum mês
+    avisos = []
+    for pessoa in pessoas:
+        for m in meses:
+            if nivel_de(pessoa, m) == 3:
+                avisos.append((pessoa, MESES_PT_FULL[m-1]))
+
+    if avisos:
         st.markdown("---")
-        st.markdown("**⚠️ Atenção — picos de sobrecarga (5+ projetos):**")
-        for _, row in sobrecarga.iterrows():
-            mes_nome = MESES_PT_FULL[int(row["mnum"]) - 1]
-            st.markdown(f"- **{row['pessoa']}** em {mes_nome}: {int(row['n_proj'])} projetos simultâneos")
+        st.markdown("**⚠️ Atenção — picos de sobrecarga:**")
+        for pessoa, mes in avisos:
+            st.markdown(f"- **{pessoa}** em {mes}")
 
 
 # ============================================================
