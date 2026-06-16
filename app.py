@@ -679,6 +679,8 @@ def aba_alocacao(df_gantt):
         return
 
     m_lo, m_hi = int(df_gantt["mes_de"].min()), int(df_gantt["mes_ate"].max())
+
+    # ── filtros ────────────────────────────────────────────
     c1, c2 = st.columns([1, 2])
     with c1:
         vis = st.radio("Visão", ["Por pessoa", "Por projeto"], horizontal=True)
@@ -688,17 +690,41 @@ def aba_alocacao(df_gantt):
                               format="%d", help="Filtra a janela de meses exibida")
         else:
             faixa = (m_lo, m_hi)
+
+    todas_pessoas  = sorted(df_gantt["pessoa"].unique())
+    todos_projetos = sorted(df_gantt["projeto"].unique())
+
+    f1, f2 = st.columns(2)
+    with f1:
+        sel_pessoas = st.multiselect(
+            "Filtrar pessoas", options=todas_pessoas, default=todas_pessoas,
+            placeholder="Todas as pessoas",
+        )
+    with f2:
+        sel_projetos = st.multiselect(
+            "Filtrar projetos", options=todos_projetos, default=todos_projetos,
+            placeholder="Todos os projetos",
+        )
+
     m_min, m_max = faixa
 
-    # mantém só quem cruza a janela escolhida
-    d = df_gantt[(df_gantt["mes_ate"] >= m_min) & (df_gantt["mes_de"] <= m_max)].copy()
+    # aplica todos os filtros
+    d = df_gantt[
+        (df_gantt["mes_ate"] >= m_min) & (df_gantt["mes_de"] <= m_max) &
+        (df_gantt["pessoa"].isin(sel_pessoas if sel_pessoas else todas_pessoas)) &
+        (df_gantt["projeto"].isin(sel_projetos if sel_projetos else todos_projetos))
+    ].copy()
     d["mes_de"] = d["mes_de"].clip(lower=m_min)
     d["mes_ate"] = d["mes_ate"].clip(upper=m_max)
 
-    pessoas = sorted(d["pessoa"].unique())
+    if d.empty:
+        st.info("Nenhum resultado para os filtros selecionados.")
+        return
+
+    pessoas  = sorted(d["pessoa"].unique())
     projetos = sorted(d["projeto"].unique())
-    cor_pessoa = {p: PALETA[i % len(PALETA)] for i, p in enumerate(pessoas)}
-    cor_proj = {p: PALETA[i % len(PALETA)] for i, p in enumerate(projetos)}
+    cor_pessoa = {p: PALETA[i % len(PALETA)] for i, p in enumerate(todas_pessoas)}
+    cor_proj   = {p: PALETA[i % len(PALETA)] for i, p in enumerate(todos_projetos)}
 
     if vis == "Por pessoa":
         groups = []
