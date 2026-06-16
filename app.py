@@ -561,7 +561,7 @@ def aba_pesquisador(df_resp, df_aloc, df_pessoas):
         c1.metric("Dedicação", f"{carga:.0f}h/sem")
         c2.metric("Média projetos/mês", f"{media:.1f}")
         c3.metric("Pico de projetos", int(pico))
-        n_aberto = (df_resp[df_resp["responsavel"] == pessoa]["status"] != "Concluído").sum()
+        n_aberto = (df_resp[df_resp["pessoa"] == pessoa]["status"] != "Concluído").sum()
         c4.metric("Atividades em aberto", int(n_aberto))
 
         st.markdown("---")
@@ -594,11 +594,17 @@ def aba_pesquisador(df_resp, df_aloc, df_pessoas):
 
     st.markdown("---")
     st.markdown(f"**Atividades de {pessoa}**")
-    at_p = df_resp[df_resp["responsavel"] == pessoa].copy()
+    # df_resp tem id_atividade, pessoa, projeto, prazo, status, eh_entregavel.
+    # Para sub_projeto e atividade precisamos juntar com df_at via id_atividade.
+    at_p = df_resp[df_resp["pessoa"] == pessoa].copy()
     at_p = at_p[at_p["prazo"].notna()].sort_values("prazo")
     if at_p.empty:
         st.info(f"{pessoa} não tem atividades com data atribuídas.")
     else:
+        # Carrega Atividades pra ter sub_projeto e nome da atividade
+        df_at_full = pd.read_excel(MASTER_FILE, sheet_name="Atividades",
+                                    usecols=["id_atividade", "sub_projeto", "atividade"])
+        at_p = at_p.merge(df_at_full, on="id_atividade", how="left")
         st.dataframe(
             at_p[["prazo", "projeto", "sub_projeto", "atividade", "status", "eh_entregavel"]].rename(
                 columns={"prazo": "Prazo", "projeto": "Projeto", "sub_projeto": "Subprojeto",
