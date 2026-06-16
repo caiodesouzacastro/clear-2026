@@ -772,17 +772,19 @@ def aba_farol(df_aloc):
     )
 
     # Destaque: quem está em sobrecarga (nível 3) em algum mês
-    avisos = []
+    # Agrupa meses críticos por pessoa (uma linha por pessoa)
+    avisos = {}
     for pessoa in pessoas:
-        for m in meses:
-            if nivel_de(pessoa, m) == 3:
-                avisos.append((pessoa, MESES_PT_FULL[m-1]))
+        meses_criticos = [MESES_PT_FULL[m-1] for m in meses if nivel_de(pessoa, m) == 3]
+        if meses_criticos:
+            avisos[pessoa] = meses_criticos
 
     if avisos:
         st.markdown("---")
         st.markdown("**⚠️ Atenção — picos de sobrecarga:**")
-        for pessoa, mes in avisos:
-            st.markdown(f"- **{pessoa}** em {mes}")
+        for pessoa, lista_meses in avisos.items():
+            meses_str = ", ".join(lista_meses)
+            st.markdown(f"- **{pessoa}** — {meses_str}")
 
 
 # ============================================================
