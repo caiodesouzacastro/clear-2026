@@ -247,8 +247,6 @@ def aba_gantt(df_at):
     st.subheader("Visão Geral do Ano")
 
     com_data = df_at[df_at["prazo"].notna()].copy()
-    # Mantém só o ano do painel (2026) — remove resíduos de 2025 (e 2027) que
-    # ficavam espremidos nas bordas e poluíam a linha do tempo.
     com_data = com_data[(com_data["prazo"] >= pd.Timestamp("2026-01-01")) &
                         (com_data["prazo"] <= pd.Timestamp("2026-12-31"))]
     hoje = pd.Timestamp(date.today())
@@ -262,20 +260,30 @@ def aba_gantt(df_at):
     c4.metric("Atrasadas", len(atrasadas))
 
     st.markdown("---")
+
+    # Filtro de projetos inline
+    todos_projetos = sorted(com_data["projeto"].unique())
+    filtro_projs = st.multiselect(
+        "Filtrar projetos na timeline",
+        options=todos_projetos,
+        default=todos_projetos,
+        placeholder="Todos os projetos",
+    )
+    if filtro_projs:
+        com_data = com_data[com_data["projeto"].isin(filtro_projs)]
+
     st.markdown("**Linha do tempo por projeto** — 2026")
 
     if com_data.empty:
         st.info("Sem atividades com data no filtro atual.")
         return
 
-    # Agrupar por projeto: data mínima e máxima de cada
     ano_ini = pd.Timestamp("2026-01-01")
     ano_fim = pd.Timestamp("2026-12-31")
     total_dias = (ano_fim - ano_ini).days
 
     projetos = sorted(com_data["projeto"].unique())
 
-    # Cabeçalho de meses
     header_meses = "".join(
         f'<div style="flex:1; text-align:center; font-size:0.7rem; '
         f'color:{TEXTO_DIM2}; border-left:1px solid {BORDA}; padding:2px 0;">{m}</div>'
@@ -293,29 +301,46 @@ def aba_gantt(df_at):
         n_entreg = int(d["eh_entregavel"].sum())
         n_total = len(d)
 
+        # % concluído
+        n_conc = int((d["status"] == "Concluído").sum())
+        pct_conc = int(n_conc / n_total * 100) if n_total > 0 else 0
+        # cor da barra de progresso: verde se >=80, âmbar se >=40, vermelho se <40
+        cor_prog = ("#5a9367" if pct_conc >= 80 else "#d99a2b" if pct_conc >= 40 else "#d9534f")
+
         marcadores = ""
         for _, r in d[d["eh_entregavel"]].iterrows():
             pos = (r["prazo"] - ano_ini).days / total_dias * 100
             tt = str(r["atividade"])[:60].replace('"', "'")
-            marcadores += (f'<div title="{tt} ({r["prazo"].strftime("%d/%m")})" style="position:absolute;left:{pos:.1f}%;top:50%;transform:translate(-50%,-50%);width:9px;height:9px;background:{AZUL_CLARO};border:1.5px solid {BG};border-radius:50%;z-index:2;"></div>')
+            marcadores += (
+                f'<div title="{tt} ({r["prazo"].strftime("%d/%m")})" '
+                f'style="position:absolute;left:{pos:.1f}%;top:50%;transform:translate(-50%,-50%);'
+                f'width:9px;height:9px;background:{AZUL_CLARO};border:1.5px solid {BG};'
+                f'border-radius:50%;z-index:2;"></div>'
+            )
 
         linhas_html += (
             f'<div style="display:flex;align-items:center;margin-bottom:6px;">'
-            f'<div style="width:170px;font-size:0.8rem;color:{TEXTO};padding-right:10px;text-align:right;flex-shrink:0;">'
-            f'{proj}<br><span style="color:{TEXTO_DIM2};font-size:0.7rem;">{n_total} ativ · {n_entreg} entreg</span></div>'
+            f'<div style="width:180px;font-size:0.8rem;color:{TEXTO};padding-right:10px;text-align:right;flex-shrink:0;">'
+            f'{proj}<br>'
+            f'<span style="color:{TEXTO_DIM2};font-size:0.7rem;">{n_total} ativ · {n_entreg} entreg</span><br>'
+            f'<div style="margin-top:2px;background:{BORDA};border-radius:3px;height:4px;overflow:hidden;">'
+            f'<div style="width:{pct_conc}%;background:{cor_prog};height:4px;border-radius:3px;"></div></div>'
+            f'<span style="font-size:0.65rem;color:{cor_prog};">{pct_conc}% concluído</span>'
+            f'</div>'
             f'<div style="flex:1;position:relative;height:26px;background:{BG_CARD};border-radius:3px;">'
-            f'<div style="position:absolute;left:{ini_pct:.1f}%;width:{larg_pct:.1f}%;top:6px;height:14px;background:{AZUL_ESCURO};border-radius:3px;"></div>'
+            f'<div style="position:absolute;left:{ini_pct:.1f}%;width:{larg_pct:.1f}%;top:6px;height:14px;'
+            f'background:{AZUL_ESCURO};border-radius:3px;"></div>'
             f'{marcadores}</div></div>'
         )
 
     html = (
         f'<div style="background:{BG};padding:14px;border-radius:6px;border:1px solid {BORDA};">'
         f'<div style="display:flex;margin-bottom:8px;">'
-        f'<div style="width:170px;flex-shrink:0;"></div>'
+        f'<div style="width:180px;flex-shrink:0;"></div>'
         f'<div style="flex:1;display:flex;">{header_meses}</div></div>'
         f'{linhas_html}</div>'
         f'<div style="font-size:0.75rem;color:{TEXTO_DIM2};margin-top:8px;">'
-        f'● Marcadores azuis = entregáveis críticos · Barra = período de atividades do projeto</div>'
+        f'● Marcadores azuis = entregáveis críticos · Barra = período · Barra fina = % concluído</div>'
     )
     st.markdown(html, unsafe_allow_html=True)
 
@@ -544,6 +569,105 @@ def aba_pesquisador(df_resp, df_aloc, df_pessoas):
 
 
 # ============================================================
+# ABA 4 — Farol de Intensidade de Pessoal
+# ============================================================
+def aba_farol(df_aloc):
+    st.subheader("Farol de Intensidade — Carga por Pessoa")
+    st.caption("Número de projetos simultâneos por pessoa, mês a mês. Vermelho = sobrecarga, verde = ok.")
+
+    if df_aloc.empty:
+        st.info("Sem dados de alocação.")
+        return
+
+    MES_NUM = {m: i + 1 for i, m in enumerate(MESES_PT_FULL)}
+    aloc = df_aloc.copy()
+    aloc["mnum"] = aloc["mes"].map(MES_NUM)
+    aloc = aloc.dropna(subset=["mnum", "pessoa"])
+    aloc = aloc[aloc["pessoa"].notna() & (aloc["pessoa"] != "PMO")]
+
+    pivot = (aloc.groupby(["pessoa", "mnum"])["projeto_alocacao"]
+             .nunique().reset_index()
+             .rename(columns={"projeto_alocacao": "n_proj"}))
+
+    pessoas = sorted(pivot["pessoa"].unique())
+    meses = list(range(1, 13))
+
+    # Thresholds
+    def cor_farol(n):
+        if n == 0:   return BG_CARD, TEXTO_DIM2
+        if n <= 2:   return "#1a3d2b", "#5a9367"   # verde escuro / texto verde
+        if n <= 4:   return "#2d2a14", "#d99a2b"   # âmbar
+        return "#2d1414", "#d9534f"                 # vermelho
+
+    # Tabela HTML
+    col_w = 62
+    name_w = 130
+    row_h = 44
+
+    header_cells = "".join(
+        f'<th style="width:{col_w}px;min-width:{col_w}px;text-align:center;'
+        f'font-size:11px;color:{TEXTO_DIM2};font-weight:600;padding:6px 2px;'
+        f'border-bottom:1px solid {BORDA};">{MESES_PT[m-1]}</th>'
+        for m in meses
+    )
+    table = (
+        f'<table style="border-collapse:collapse;width:100%;font-family:sans-serif;">'
+        f'<thead><tr>'
+        f'<th style="width:{name_w}px;text-align:left;font-size:11px;color:{TEXTO_DIM2};'
+        f'font-weight:600;padding:6px 8px;border-bottom:1px solid {BORDA};">Pessoa</th>'
+        f'{header_cells}</tr></thead><tbody>'
+    )
+
+    for pi, pessoa in enumerate(pessoas):
+        row_bg = "rgba(255,255,255,0.03)" if pi % 2 == 1 else "transparent"
+        row = f'<tr style="background:{row_bg};">'
+        row += (f'<td style="padding:6px 8px;font-size:13px;font-weight:500;'
+                f'color:{TEXTO};white-space:nowrap;">{pessoa}</td>')
+        for m in meses:
+            sub = pivot[(pivot["pessoa"] == pessoa) & (pivot["mnum"] == m)]
+            n = int(sub["n_proj"].iloc[0]) if not sub.empty else 0
+            bg, fg = cor_farol(n)
+            icon = "🔴" if n >= 5 else ("🟡" if n >= 3 else ("🟢" if n >= 1 else ""))
+            row += (
+                f'<td style="text-align:center;padding:4px 2px;height:{row_h}px;">'
+                f'<div style="margin:auto;width:50px;height:34px;border-radius:6px;'
+                f'background:{bg};display:flex;flex-direction:column;'
+                f'align-items:center;justify-content:center;gap:0px;">'
+                f'<span style="font-size:15px;line-height:1;">{icon if n > 0 else "·"}</span>'
+                f'<span style="font-size:11px;font-weight:700;color:{fg};line-height:1.2;">'
+                f'{n if n > 0 else ""}</span></div></td>'
+            )
+        row += "</tr>"
+        table += row
+
+    table += "</tbody></table>"
+
+    legenda = (
+        f'<div style="display:flex;gap:20px;margin-top:12px;font-size:12px;color:{TEXTO_DIM2};">'
+        f'<span>🟢 1–2 projetos — carga normal</span>'
+        f'<span>🟡 3–4 projetos — atenção</span>'
+        f'<span>🔴 5+ projetos — sobrecarga</span>'
+        f'<span style="opacity:.6;">· = sem alocação neste mês</span>'
+        f'</div>'
+    )
+
+    st.markdown(
+        f'<div style="background:{BG};padding:16px;border-radius:8px;border:1px solid {BORDA};'
+        f'overflow-x:auto;">{table}{legenda}</div>',
+        unsafe_allow_html=True
+    )
+
+    # Destaque: quem está em sobrecarga algum mês
+    sobrecarga = pivot[pivot["n_proj"] >= 5]
+    if not sobrecarga.empty:
+        st.markdown("---")
+        st.markdown("**⚠️ Atenção — picos de sobrecarga (5+ projetos):**")
+        for _, row in sobrecarga.iterrows():
+            mes_nome = MESES_PT_FULL[int(row["mnum"]) - 1]
+            st.markdown(f"- **{row['pessoa']}** em {mes_nome}: {int(row['n_proj'])} projetos simultâneos")
+
+
+# ============================================================
 # ABA 5 — Alocação (Gantt por pessoa × projeto)
 # ============================================================
 def aba_alocacao(df_gantt):
@@ -594,6 +718,30 @@ def aba_alocacao(df_gantt):
         height=int(h) + 24, scrolling=False,
     )
 
+    # Legenda de cores
+    if vis == "Por pessoa":
+        itens_leg = [(cor_proj.get(p, AZUL), p) for p in projetos]
+        titulo_leg = "Projetos"
+    else:
+        itens_leg = [(cor_pessoa.get(p, AZUL), p) for p in pessoas]
+        titulo_leg = "Pessoas"
+
+    dots = "".join(
+        f'<span style="display:inline-flex;align-items:center;gap:5px;'
+        f'margin:3px 10px 3px 0;font-size:12px;color:{TEXTO_DIM};">'
+        f'<span style="width:12px;height:12px;border-radius:3px;background:{cor};'
+        f'flex-shrink:0;display:inline-block;"></span>{nome}</span>'
+        for cor, nome in itens_leg
+    )
+    st.markdown(
+        f'<div style="margin-top:8px;padding:10px 14px;background:{BG_CARD};'
+        f'border:1px solid {BORDA};border-radius:8px;">'
+        f'<span style="font-size:11px;font-weight:600;color:{TEXTO_DIM2};'
+        f'text-transform:uppercase;letter-spacing:.05em;">{titulo_leg}</span><br>'
+        f'<div style="margin-top:6px;">{dots}</div></div>',
+        unsafe_allow_html=True
+    )
+
     # carga: pico de frentes simultâneas por pessoa
     st.markdown("**Pico de frentes simultâneas (no período exibido)**")
     pico = {}
@@ -623,8 +771,8 @@ def main():
     if escopo == "Só entregáveis críticos":
         df_resp_f = df_resp_f[df_resp_f["eh_entregavel"]]
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(
-        ["Visão Geral", "Calendário", "Alocação", "Equipe", "Pesquisador"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+        ["Visão Geral", "Calendário", "Alocação", "Farol", "Equipe", "Pesquisador"])
     with tab1:
         aba_gantt(df_at_f)
     with tab2:
@@ -632,8 +780,10 @@ def main():
     with tab3:
         aba_alocacao(df_gantt)
     with tab4:
-        aba_equipe(df_aloc)
+        aba_farol(df_aloc)
     with tab5:
+        aba_equipe(df_aloc)
+    with tab6:
         aba_pesquisador(df_resp_f, df_aloc, df_pessoas)
 
 
