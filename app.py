@@ -586,12 +586,18 @@ def aba_farol(df_aloc):
         farol_manual = pd.read_excel("Farol_Intensidade_CLEAR_2026.xlsx",
                                      sheet_name="Farol de Intensidade",
                                      header=3)
-        # remove colunas vazias e a linha de "TOTAL EQUIPE"
+        # remove colunas vazias e a linha de "TOTAL EQUIPE" / linha de instrução
         farol_manual = farol_manual.dropna(how="all")
         if "Pessoa" in farol_manual.columns:
             farol_manual = farol_manual[farol_manual["Pessoa"].notna()]
-            farol_manual = farol_manual[~farol_manual["Pessoa"].astype(str)
-                                        .str.contains("TOTAL", case=False, na=False)]
+            # nomes próprios são curtos (< 30 chars) e não contêm dois-pontos
+            mask_valid = (
+                farol_manual["Pessoa"].astype(str).str.len() < 30
+            ) & (
+                ~farol_manual["Pessoa"].astype(str).str.contains(
+                    r"TOTAL|Instrução|:", case=False, na=False, regex=True)
+            )
+            farol_manual = farol_manual[mask_valid]
     except Exception:
         farol_manual = None
 
