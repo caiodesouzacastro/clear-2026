@@ -619,142 +619,155 @@ def aba_pesquisador(df_resp, df_aloc, df_pessoas):
 # ============================================================
 def aba_farol(df_aloc):
     st.subheader("Farol de Intensidade — Carga por Pessoa")
-    st.caption("Percepção de carga de trabalho por pessoa, mês a mês. "
-               "1 = tranquilo · 2 = ok · 3 = sobrecarga.")
+    st.caption("Comparação entre carga **esperada** (definida pelos líderes nos cronogramas) "
+               "e carga **percebida** (auto-declarada pela equipe).")
 
     if df_aloc.empty:
         st.info("Sem dados de alocação.")
         return
 
-    # ── Tenta ler o Farol_Intensidade preenchido (auto-declaração) ───
+    # ── Carrega Carga ESPERADA (do master) ───────────────────────────
+    try:
+        carga_esp = pd.read_excel(MASTER_FILE, sheet_name="Carga_Esperada")
+    except Exception:
+        carga_esp = pd.DataFrame(columns=["pessoa", "projeto", "mes", "nivel"])
+
+    # ── Carrega Farol PERCEBIDO (arquivo separado) ──────────────────
     farol_manual = None
     try:
         farol_manual = pd.read_excel("Farol_Intensidade_CLEAR_2026.xlsx",
                                      sheet_name="Farol de Intensidade",
                                      header=3)
-        # remove colunas vazias e a linha de "TOTAL EQUIPE" / linha de instrução
         farol_manual = farol_manual.dropna(how="all")
         if "Pessoa" in farol_manual.columns:
             farol_manual = farol_manual[farol_manual["Pessoa"].notna()]
-            # nomes próprios são curtos (< 30 chars) e não contêm dois-pontos
-            mask_valid = (
+            mask = (
                 farol_manual["Pessoa"].astype(str).str.len() < 30
             ) & (
                 ~farol_manual["Pessoa"].astype(str).str.contains(
                     r"TOTAL|Instrução|:", case=False, na=False, regex=True)
             )
-            farol_manual = farol_manual[mask_valid]
+            farol_manual = farol_manual[mask]
     except Exception:
         farol_manual = None
 
-    MES_NUM = {m: i + 1 for i, m in enumerate(MESES_PT_FULL)}
-
-    # Se temos o farol manual preenchido, pulamos o cálculo automático
-    if farol_manual is not None and not farol_manual.empty:
-        pivot = pd.DataFrame(columns=["pessoa", "mnum", "nivel"])
-    else:
-        aloc = df_aloc.copy()
-        aloc["mnum"] = aloc["mes"].map(MES_NUM)
-        aloc = aloc.dropna(subset=["mnum", "pessoa"])
-        aloc = aloc[aloc["pessoa"].notna() & (aloc["pessoa"] != "PMO")]
-
-        # A aba Alocacao já traz 'n_projetos_no_mes' pré-calculado
-        if "n_projetos_no_mes" in aloc.columns:
-            pivot = aloc[["pessoa", "mnum", "n_projetos_no_mes"]].rename(
-                columns={"n_projetos_no_mes": "n_proj"}).copy()
-        elif "projeto_alocacao" in aloc.columns:
-            pivot = (aloc.groupby(["pessoa", "mnum"])["projeto_alocacao"]
-                     .nunique().reset_index()
-                     .rename(columns={"projeto_alocacao": "n_proj"}))
-        else:
-            pivot = pd.DataFrame(columns=["pessoa", "mnum", "n_proj"])
-
-        # Mapeia número de projetos -> escala 1-3 (heurística)
-        def to_escala(n):
-            if n == 0: return 0
-            if n == 1: return 1
-            if n <= 3: return 2
-            return 3
-        if not pivot.empty:
-            pivot["nivel"] = pivot["n_proj"].apply(to_escala)
-        else:
-            pivot["nivel"] = pd.Series(dtype=int)
-
-    pessoas = sorted(pivot["pessoa"].unique()) if not pivot.empty else []
-    meses = list(range(1, 13))
-
-    fonte_label = "Auto-calculado a partir da alocação"
-    if farol_manual is not None and not farol_manual.empty:
-        fonte_label = "Preenchido pela equipe (auto-declaração)"
-
-    st.caption(f"📊 Fonte: {fonte_label}")
-
-    # Cor por nível (1-3)
-    def cor_nivel(nivel):
-        if nivel == 0: return BG_CARD, TEXTO_DIM2, ""
-        if nivel == 1: return "#1a3d2b", "#5a9367", "🟢"  # tranquilo
-        if nivel == 2: return "#2d2a14", "#d99a2b", "🟡"  # ok
-        return "#2d1414", "#d9534f", "🔴"                  # sobrecarga
-
-    # Tabela HTML
-    col_w = 62; name_w = 130; row_h = 44
-
-    header_cells = "".join(
-        f'<th style="width:{col_w}px;min-width:{col_w}px;text-align:center;'
-        f'font-size:11px;color:{TEXTO_DIM2};font-weight:600;padding:6px 2px;'
-        f'border-bottom:1px solid {BORDA};">{MESES_PT[m-1]}</th>'
-        for m in meses
-    )
-    table = (
-        f'<table style="border-collapse:collapse;width:100%;font-family:sans-serif;">'
-        f'<thead><tr>'
-        f'<th style="width:{name_w}px;text-align:left;font-size:11px;color:{TEXTO_DIM2};'
-        f'font-weight:600;padding:6px 8px;border-bottom:1px solid {BORDA};">Pessoa</th>'
-        f'{header_cells}</tr></thead><tbody>'
+    # ── Toggle de modo ───────────────────────────────────────────────
+    modo = st.radio(
+        "Visualizar",
+        ["Esperada", "Percebida", "Comparativo"],
+        horizontal=True,
+        captions=[
+            "O que os líderes esperam",
+            "Como a equipe se sente",
+            "Lado a lado para identificar gaps",
+        ],
     )
 
-    # Função pra pegar o nível de uma pessoa em um mês
+    # ── Helpers de cor ───────────────────────────────────────────────
+    def cor_nivel(n):
+        # n inteiro 0/1/2/3 (mesma escala do farol percebido)
+        if n == 0: return BG_CARD, TEXTO_DIM2, ""
+        if n == 1: return "#1a3d2b", "#5a9367", "🟢"
+        if n == 2: return "#2d2a14", "#d99a2b", "🟡"
+        return "#2d1414", "#d9534f", "🔴"
+
+    MAP_BMA = {"B": 1, "M": 2, "A": 3}
     MES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun",
                  "Jul","Ago","Set","Out","Nov","Dez"]
-    def nivel_de(pessoa, m):
-        if farol_manual is not None and "Pessoa" in farol_manual.columns:
-            linha = farol_manual[farol_manual["Pessoa"] == pessoa]
-            if not linha.empty:
-                col = MES_ABREV[m-1]
-                if col in linha.columns:
-                    v = linha[col].iloc[0]
-                    if pd.notna(v):
-                        try: return int(v)
-                        except: return 0
-            return 0
-        sub = pivot[(pivot["pessoa"] == pessoa) & (pivot["mnum"] == m)]
-        return int(sub["nivel"].iloc[0]) if not sub.empty else 0
 
-    # Lista canônica de pessoas (do manual se houver, senão do auto)
+    # ── Constrói matriz ESPERADA (pessoa x mês) ──────────────────────
+    # Regra: soma A=3, M=2, B=1 entre projetos; mapeia 1-2→verde, 3-4→amarelo, 5+→vermelho
+    matriz_esp = {}
+    if not carga_esp.empty:
+        carga_esp = carga_esp.dropna(subset=["pessoa", "mes", "nivel"]).copy()
+        carga_esp["mes"] = carga_esp["mes"].astype(int)
+        carga_esp["peso"] = carga_esp["nivel"].astype(str).str.upper().map(MAP_BMA).fillna(0)
+        soma = (carga_esp.groupby(["pessoa", "mes"])["peso"].sum()
+                .reset_index().rename(columns={"peso": "total"}))
+        def to_nivel(total):
+            if total == 0: return 0
+            if total <= 2: return 1
+            if total <= 4: return 2
+            return 3
+        soma["nivel"] = soma["total"].apply(to_nivel)
+        for _, r in soma.iterrows():
+            matriz_esp[(r["pessoa"], int(r["mes"]))] = (int(r["nivel"]), int(r["total"]))
+
+    # ── Constrói matriz PERCEBIDA (pessoa x mês) ─────────────────────
+    matriz_perc = {}
     if farol_manual is not None and not farol_manual.empty and "Pessoa" in farol_manual.columns:
-        pessoas = sorted(farol_manual["Pessoa"].dropna().unique())
+        for _, r in farol_manual.iterrows():
+            pessoa = str(r["Pessoa"]).strip()
+            for mi, col in enumerate(MES_ABREV, start=1):
+                if col in farol_manual.columns:
+                    v = r[col]
+                    if pd.notna(v):
+                        try:
+                            matriz_perc[(pessoa, mi)] = int(v)
+                        except Exception:
+                            pass
 
-    for pi, pessoa in enumerate(pessoas):
-        row_bg = "rgba(255,255,255,0.03)" if pi % 2 == 1 else "transparent"
-        row = f'<tr style="background:{row_bg};">'
-        row += (f'<td style="padding:6px 8px;font-size:13px;font-weight:500;'
-                f'color:{TEXTO};white-space:nowrap;">{pessoa}</td>')
-        for m in meses:
-            nivel = nivel_de(pessoa, m)
-            bg, fg, icon = cor_nivel(nivel)
-            row += (
-                f'<td style="text-align:center;padding:4px 2px;height:{row_h}px;">'
-                f'<div style="margin:auto;width:50px;height:34px;border-radius:6px;'
-                f'background:{bg};display:flex;flex-direction:column;'
-                f'align-items:center;justify-content:center;gap:0px;">'
-                f'<span style="font-size:15px;line-height:1;">{icon if nivel > 0 else "·"}</span>'
-                f'<span style="font-size:11px;font-weight:700;color:{fg};line-height:1.2;">'
-                f'{nivel if nivel > 0 else ""}</span></div></td>'
-            )
-        row += "</tr>"
-        table += row
+    # Lista unificada de pessoas
+    pessoas = sorted(set(
+        [p for p, _ in matriz_esp.keys()] +
+        [p for p, _ in matriz_perc.keys()]
+    ))
+    meses = list(range(1, 13))
 
-    table += "</tbody></table>"
+    # Avisos de fonte
+    fontes = []
+    if matriz_esp:
+        fontes.append(f"🎯 **Esperada**: {len(set(p for p,_ in matriz_esp.keys()))} pessoas em {len(carga_esp['projeto'].unique()) if not carga_esp.empty else 0} projetos")
+    else:
+        fontes.append("🎯 **Esperada**: sem dados (líderes ainda não preencheram)")
+    if matriz_perc:
+        fontes.append(f"👤 **Percebida**: {len(set(p for p,_ in matriz_perc.keys()))} pessoas com auto-declaração")
+    else:
+        fontes.append("👤 **Percebida**: sem dados (auto-declaração não preenchida)")
+    st.caption(" · ".join(fontes))
+
+    # ── Render: tabela uma coluna ou duas colunas (Comparativo) ──────
+    def render_tabela(titulo, get_nivel_fn, pessoas_lista):
+        col_w = 62; name_w = 130; row_h = 44
+        header_cells = "".join(
+            f'<th style="width:{col_w}px;min-width:{col_w}px;text-align:center;'
+            f'font-size:11px;color:{TEXTO_DIM2};font-weight:600;padding:6px 2px;'
+            f'border-bottom:1px solid {BORDA};">{MESES_PT[m-1]}</th>'
+            for m in meses
+        )
+        table = (
+            f'<table style="border-collapse:collapse;width:100%;font-family:sans-serif;">'
+            f'<thead><tr>'
+            f'<th style="width:{name_w}px;text-align:left;font-size:11px;color:{TEXTO_DIM2};'
+            f'font-weight:600;padding:6px 8px;border-bottom:1px solid {BORDA};">{titulo}</th>'
+            f'{header_cells}</tr></thead><tbody>'
+        )
+        for pi, pessoa in enumerate(pessoas_lista):
+            row_bg = "rgba(255,255,255,0.03)" if pi % 2 == 1 else "transparent"
+            row = f'<tr style="background:{row_bg};">'
+            row += (f'<td style="padding:6px 8px;font-size:13px;font-weight:500;'
+                    f'color:{TEXTO};white-space:nowrap;">{pessoa}</td>')
+            for m in meses:
+                nivel = get_nivel_fn(pessoa, m)
+                bg, fg, icon = cor_nivel(nivel)
+                row += (
+                    f'<td style="text-align:center;padding:4px 2px;height:{row_h}px;">'
+                    f'<div style="margin:auto;width:50px;height:34px;border-radius:6px;'
+                    f'background:{bg};display:flex;flex-direction:column;'
+                    f'align-items:center;justify-content:center;gap:0px;">'
+                    f'<span style="font-size:15px;line-height:1;">{icon if nivel > 0 else "·"}</span>'
+                    f'<span style="font-size:11px;font-weight:700;color:{fg};line-height:1.2;">'
+                    f'{nivel if nivel > 0 else ""}</span></div></td>'
+                )
+            row += "</tr>"
+            table += row
+        table += "</tbody></table>"
+        return table
+
+    def n_esp(p, m):
+        return matriz_esp.get((p, m), (0, 0))[0]
+    def n_perc(p, m):
+        return matriz_perc.get((p, m), 0)
 
     legenda = (
         f'<div style="display:flex;gap:20px;margin-top:12px;font-size:12px;color:{TEXTO_DIM2};">'
@@ -765,31 +778,75 @@ def aba_farol(df_aloc):
         f'</div>'
     )
 
-    st.markdown(
-        f'<div style="background:{BG};padding:16px;border-radius:8px;border:1px solid {BORDA};'
-        f'overflow-x:auto;">{table}{legenda}</div>',
-        unsafe_allow_html=True
-    )
+    if modo == "Esperada":
+        if not matriz_esp:
+            st.info("Os líderes ainda não preencheram a aba 'Carga Esperada' nos cronogramas.")
+            return
+        tabela = render_tabela("Pessoa", n_esp, pessoas)
+        st.markdown(
+            f'<div style="background:{BG};padding:16px;border-radius:8px;border:1px solid {BORDA};'
+            f'overflow-x:auto;">{tabela}{legenda}</div>',
+            unsafe_allow_html=True
+        )
+    elif modo == "Percebida":
+        if not matriz_perc:
+            st.info("A equipe ainda não preencheu a auto-declaração no Farol_Intensidade.")
+            return
+        tabela = render_tabela("Pessoa", n_perc, pessoas)
+        st.markdown(
+            f'<div style="background:{BG};padding:16px;border-radius:8px;border:1px solid {BORDA};'
+            f'overflow-x:auto;">{tabela}{legenda}</div>',
+            unsafe_allow_html=True
+        )
+    else:  # Comparativo
+        if not matriz_esp and not matriz_perc:
+            st.info("Sem dados em nenhuma das fontes.")
+            return
+        col_e, col_p = st.columns(2)
+        with col_e:
+            st.markdown("**🎯 Esperada** (líderes)")
+            if matriz_esp:
+                tabela = render_tabela("Pessoa", n_esp, pessoas)
+                st.markdown(
+                    f'<div style="background:{BG};padding:12px;border-radius:8px;border:1px solid {BORDA};'
+                    f'overflow-x:auto;">{tabela}</div>',
+                    unsafe_allow_html=True
+                )
+            else:
+                st.info("Sem dados.")
+        with col_p:
+            st.markdown("**👤 Percebida** (equipe)")
+            if matriz_perc:
+                tabela = render_tabela("Pessoa", n_perc, pessoas)
+                st.markdown(
+                    f'<div style="background:{BG};padding:12px;border-radius:8px;border:1px solid {BORDA};'
+                    f'overflow-x:auto;">{tabela}</div>',
+                    unsafe_allow_html=True
+                )
+            else:
+                st.info("Sem dados.")
+        st.markdown(legenda, unsafe_allow_html=True)
 
-    # Destaque: quem está em sobrecarga (nível 3) em algum mês
-    # Agrupa meses críticos por pessoa (uma linha por pessoa)
+    # ── Picos de sobrecarga (uma linha por pessoa) ──────────────────
     avisos = {}
     for pessoa in pessoas:
-        meses_criticos = [MESES_PT_FULL[m-1] for m in meses if nivel_de(pessoa, m) == 3]
+        meses_criticos = []
+        for m in meses:
+            n = n_perc(pessoa, m) if modo == "Percebida" else n_esp(pessoa, m)
+            if n == 3:
+                meses_criticos.append(MESES_PT_FULL[m-1])
         if meses_criticos:
             avisos[pessoa] = meses_criticos
 
     if avisos:
         st.markdown("---")
-        st.markdown("**⚠️ Atenção — picos de sobrecarga:**")
+        rotulo = "percebida" if modo == "Percebida" else "esperada"
+        st.markdown(f"**⚠️ Atenção — picos de sobrecarga ({rotulo}):**")
         for pessoa, lista_meses in avisos.items():
             meses_str = ", ".join(lista_meses)
             st.markdown(f"- **{pessoa}** — {meses_str}")
 
 
-# ============================================================
-# ABA 5 — Alocação (Gantt por pessoa × projeto)
-# ============================================================
 def aba_alocacao(df_gantt):
     st.subheader("Alocação — Quem está em quê, e quando")
     st.caption("Período de cada pessoa em cada frente. Fonte: alocação nova + envolvimento do master.")
