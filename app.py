@@ -967,6 +967,90 @@ def aba_alocacao(df_gantt):
 
 
 # ============================================================
+# ABA — Comunicação (painel dedicado)
+# ============================================================
+def aba_comunicacao(df_at_full):
+    st.subheader("Comunicação")
+    st.caption("Painel dedicado do projeto de Comunicação — mostra todas as "
+               "atividades, independente do filtro lateral.")
+
+    com = df_at_full[df_at_full["projeto"] == "Comunicação"].copy()
+    if com.empty:
+        st.info("Sem atividades de Comunicação no master.")
+        return
+
+    com_data = com[com["prazo"].notna()].copy()
+    com_data = com_data[(com_data["prazo"] >= pd.Timestamp("2026-01-01")) &
+                        (com_data["prazo"] <= pd.Timestamp("2026-12-31"))]
+    sem_data = com[com["prazo"].isna()].copy()
+
+    st.markdown(
+        f'<div style="border-left:4px solid {COR_COMUNICACAO}; background:{BG_CARD}; '
+        f'padding:8px 12px; border-radius:4px; margin-bottom:12px; color:{TEXTO_DIM}; '
+        f'font-size:0.8rem;">Identidade visual do projeto: '
+        f'<span style="display:inline-block;width:11px;height:11px;background:{COR_COMUNICACAO};'
+        f'border-radius:2px;margin:0 4px -1px 4px;"></span>âmbar — a mesma cor usada no Calendário.'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Atividades", len(com))
+    c2.metric("Entregáveis", int(com["eh_entregavel"].sum()))
+    c3.metric("Com data", len(com_data))
+    c4.metric("Sem data", len(sem_data))
+
+    st.markdown("---")
+    st.markdown("**Linha do tempo** — todas as atividades datadas (◆ = entregável crítico)")
+
+    if com_data.empty:
+        st.info("Nenhuma atividade de Comunicação com data definida.")
+    else:
+        com_data = com_data.sort_values("prazo")
+        com_data["_mes"] = com_data["prazo"].dt.month
+        for mes in sorted(com_data["_mes"].unique()):
+            bloco = com_data[com_data["_mes"] == mes]
+            st.markdown(
+                f'<div style="font-size:0.8rem; font-weight:600; color:{COR_COMUNICACAO}; '
+                f'margin:14px 0 6px 0;">{MESES_PT_FULL[mes - 1]} 2026 · '
+                f'{len(bloco)} atividade(s)</div>',
+                unsafe_allow_html=True,
+            )
+            linhas = ""
+            for _, r in bloco.iterrows():
+                marca = "◆ " if r["eh_entregavel"] else ""
+                resp = (str(r["responsaveis"]) if pd.notna(r["responsaveis"])
+                        and str(r["responsaveis"]).strip() else "—")
+                sub = (f' · {r["sub_projeto"]}' if pd.notna(r["sub_projeto"])
+                       and str(r["sub_projeto"]).strip() else "")
+                cor_st = CORES_STATUS.get(r["status"], TEXTO_DIM)
+                linhas += (
+                    f'<div style="display:flex; align-items:center; gap:10px; '
+                    f'background:{BG_CARD}; border-left:3px solid {COR_COMUNICACAO}; '
+                    f'padding:6px 10px; margin-bottom:4px; border-radius:3px;">'
+                    f'<div style="min-width:50px; font-size:0.72rem; color:{TEXTO_DIM2}; '
+                    f'font-weight:600;">{r["prazo"].strftime("%d/%m")}</div>'
+                    f'<div style="flex:1; font-size:0.82rem; color:{TEXTO};">{marca}'
+                    f'{r["atividade"]}<span style="color:{TEXTO_DIM2}; '
+                    f'font-size:0.72rem;">{sub}</span></div>'
+                    f'<div style="font-size:0.72rem; color:{TEXTO_DIM}; min-width:90px; '
+                    f'text-align:right;">{resp}</div>'
+                    f'<div style="font-size:0.68rem; color:{cor_st}; min-width:80px; '
+                    f'text-align:right;">{r["status"]}</div></div>'
+                )
+            st.markdown(linhas, unsafe_allow_html=True)
+
+    if not sem_data.empty:
+        st.markdown("---")
+        with st.expander(f"Atividades sem data definida ({len(sem_data)})"):
+            for _, r in sem_data.iterrows():
+                marca = "◆ " if r["eh_entregavel"] else ""
+                obs = (f' — {r["prazo_obs"]}' if pd.notna(r["prazo_obs"])
+                       and str(r["prazo_obs"]).strip() else "")
+                st.markdown(f'- {marca}{r["atividade"]}{obs}')
+
+
+# ============================================================
 # Main
 # ============================================================
 def main():
@@ -982,20 +1066,23 @@ def main():
     if escopo == "Só entregáveis críticos":
         df_resp_f = df_resp_f[df_resp_f["eh_entregavel"]]
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-        ["Visão Geral", "Calendário", "Alocação", "Farol", "Equipe", "Pesquisador"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+        ["Visão Geral", "Calendário", "Comunicação", "Alocação",
+         "Equipe", "Pesquisador", "Farol"])
     with tab1:
         aba_gantt(df_at_f)
     with tab2:
         aba_calendario(df_at_f)
     with tab3:
-        aba_alocacao(df_gantt)
+        aba_comunicacao(df_at)
     with tab4:
-        aba_farol(df_aloc)
+        aba_alocacao(df_gantt)
     with tab5:
         aba_equipe(df_aloc)
     with tab6:
         aba_pesquisador(df_resp_f, df_aloc, df_pessoas)
+    with tab7:
+        aba_farol(df_aloc)
 
 
 if __name__ == "__main__":
