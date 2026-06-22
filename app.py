@@ -82,6 +82,9 @@ CORES_STATUS = {
     "Reunião": "#4A6FA5",
 }
 
+# Cor de destaque para entregas de Comunicação no calendário
+COR_COMUNICACAO = "#E5A84B"
+
 MESES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
             "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
 MESES_PT_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -443,11 +446,13 @@ def aba_calendario(df_at):
 
         itens = ""
         for _, r in entregas_dia.head(4).iterrows():
-            cor = CORES_STATUS.get(r["status"], TEXTO_DIM)
+            eh_com = r["projeto"] == "Comunicação"
+            cor = COR_COMUNICACAO if eh_com else CORES_STATUS.get(r["status"], TEXTO_DIM)
+            largura_borda = "3px" if eh_com else "2px"
             marca = "◆ " if r["eh_entregavel"] else ""
             itens += (
                 f'<div title="{r["atividade"][:80]}" style="font-size:0.65rem; '
-                f'background:{BG_HOVER}; border-left:2px solid {cor}; '
+                f'background:{BG_HOVER}; border-left:{largura_borda} solid {cor}; '
                 f'padding:1px 3px; margin-bottom:2px; border-radius:2px; '
                 f'white-space:nowrap; overflow:hidden; text-overflow:ellipsis; '
                 f'color:{TEXTO};">{marca}{r["atividade"][:22]}</div>'
@@ -477,7 +482,10 @@ def aba_calendario(df_at):
         f'<div style="display:flex;margin-bottom:4px;">{header}</div>'
         f'{linhas}</div>'
         f'<div style="font-size:0.75rem;color:{TEXTO_DIM2};margin-top:8px;">'
-        f'◆ = entregável crítico · Cor da borda do item = status</div>'
+        f'◆ = entregável crítico · Cor da borda do item = status · '
+        f'<span style="display:inline-block;width:9px;height:9px;'
+        f'background:{COR_COMUNICACAO};border-radius:2px;margin:0 3px -1px 0;"></span>'
+        f'Comunicação</div>'
     )
     st.markdown(html, unsafe_allow_html=True)
 

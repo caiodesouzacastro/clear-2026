@@ -58,7 +58,7 @@ São sempre **2 arquivos** que vão pro GitHub:
    ```
 3. O script gera um novo `CLEAR_Master_2026.xlsx` já com:
    - Todos os cronogramas consolidados
-   - Nomes normalizados (Zinho→Michel, Luigi→Luiggi, etc.)
+   - Nomes normalizados (Zinho→Michel, Luiggi→Luigi, etc.)
    - Aba `Alocacao_Gantt` atualizada
 4. Sobe o novo master pro GitHub conforme o passo anterior
 
@@ -71,7 +71,7 @@ São sempre **2 arquivos** que vão pro GitHub:
 | Zinho | Michel |
 | Pleno | Fred |
 | Senior | Hisrael |
-| Luigi | Luiggi |
+| Luiggi | Luigi |
 
 > Essas trocas acontecem em **todas** as células de **todas** as abas, inclusive textos livres e observações.
 
