@@ -835,24 +835,53 @@ def aba_farol(df_aloc):
                 st.info("Sem dados.")
         st.markdown(legenda, unsafe_allow_html=True)
 
-    # ── Picos de sobrecarga (uma linha por pessoa) ──────────────────
-    avisos = {}
-    for pessoa in pessoas:
-        meses_criticos = []
-        for m in meses:
-            n = n_perc(pessoa, m) if modo == "Percebida" else n_esp(pessoa, m)
-            if n == 3:
-                meses_criticos.append(MESES_PT_FULL[m-1])
-        if meses_criticos:
-            avisos[pessoa] = meses_criticos
+    # ── Bloco de alerta abaixo da tabela ───────────────────────────
+    if modo == "Comparativo":
+        # Diferença de percepção: meses em que esperada e percebida divergem
+        # (considera só meses com dado real nas DUAS fontes: nível >= 1)
+        difs = {}
+        for pessoa in pessoas:
+            linhas = []
+            for m in meses:
+                e = n_esp(pessoa, m)
+                p = n_perc(pessoa, m)
+                if e >= 1 and p >= 1 and e != p:
+                    seta = "🔴↑" if p > e else "🟢↓"
+                    linhas.append(f"{MESES_PT_FULL[m-1]} ({e}→{p} {seta})")
+            if linhas:
+                difs[pessoa] = linhas
 
-    if avisos:
         st.markdown("---")
-        rotulo = "percebida" if modo == "Percebida" else "esperada"
-        st.markdown(f"**⚠️ Atenção — picos de sobrecarga ({rotulo}):**")
-        for pessoa, lista_meses in avisos.items():
-            meses_str = ", ".join(lista_meses)
-            st.markdown(f"- **{pessoa}** — {meses_str}")
+        st.markdown("**🔀 Diferença de percepção** — onde o **esperado** pelos líderes e o "
+                    "**percebido** pela equipe divergem:")
+        if not difs:
+            st.caption("Ainda não há meses com as duas fontes preenchidas para comparar. "
+                       "A diferença aparece quando a pessoa tem carga esperada definida pelos "
+                       "líderes e também preencheu a auto-declaração no mesmo mês.")
+        else:
+            for pessoa, linhas in difs.items():
+                st.markdown(f"- **{pessoa}** — " + ", ".join(linhas))
+            st.caption("🔴↑ a equipe sente **mais** carga que o esperado · "
+                       "🟢↓ sente **menos** que o esperado · valores: esperada→percebida")
+    else:
+        # Picos de sobrecarga (uma linha por pessoa) — modos Esperada / Percebida
+        avisos = {}
+        for pessoa in pessoas:
+            meses_criticos = []
+            for m in meses:
+                n = n_perc(pessoa, m) if modo == "Percebida" else n_esp(pessoa, m)
+                if n == 3:
+                    meses_criticos.append(MESES_PT_FULL[m-1])
+            if meses_criticos:
+                avisos[pessoa] = meses_criticos
+
+        if avisos:
+            st.markdown("---")
+            rotulo = "percebida" if modo == "Percebida" else "esperada"
+            st.markdown(f"**⚠️ Atenção — picos de sobrecarga ({rotulo}):**")
+            for pessoa, lista_meses in avisos.items():
+                meses_str = ", ".join(lista_meses)
+                st.markdown(f"- **{pessoa}** — {meses_str}")
 
 
 def aba_alocacao(df_gantt):
