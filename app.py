@@ -10,6 +10,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
 from datetime import date
 from pathlib import Path
 import calendar as cal_mod
@@ -61,6 +62,12 @@ def _check_password():
 _check_password()
 
 MASTER_FILE = Path(__file__).parent / "CLEAR_Master_2026.xlsx"
+FERIAS_FILE = Path(__file__).parent / "Ferias_CLEAR_2026.xlsx"
+
+# Equipe canônica (16, com Fred e Hisrael pelos nomes reais)
+EQUIPE = ["Bia B", "Bia S", "Caio", "Carol", "Cecilia", "Fabrícia", "Fred",
+          "Hisrael", "Julia", "Junior", "Lorena", "Luan", "Luigi", "Lycia",
+          "Michel", "Samu"]
 
 # Paleta Bloomberg dark
 BG = "#0A1929"
@@ -1080,6 +1087,110 @@ def aba_comunicacao(df_at_full):
 
 
 # ============================================================
+# ABA — Férias (linha do tempo, para ver sobreposições)
+# ============================================================
+def aba_ferias():
+    st.markdown("### Férias da equipe")
+
+    # download do modelo
+    try:
+        with open(FERIAS_FILE, "rb") as fh:
+            st.download_button("Baixar modelo de férias", fh.read(),
+                               file_name="Ferias_CLEAR_2026.xlsx",
+                               mime=("application/vnd.openxmlformats-"
+                                     "officedocument.spreadsheetml.sheet"))
+    except Exception:
+        pass
+
+    try:
+        df = pd.read_excel(FERIAS_FILE, sheet_name="Férias", skiprows=2)
+    except Exception:
+        st.info("Arquivo de férias ainda não disponível no repositório.")
+        return
+
+    df = df.rename(columns=lambda c: str(c).strip())
+    if "Pessoa" not in df.columns:
+        st.info("Planilha de férias sem a coluna 'Pessoa'.")
+        return
+
+    CANON = {"Pleno": "Fred", "Senior": "Hisrael", "Sênior": "Hisrael",
+             "Luiggi": "Luigi", "BiaS": "Bia S"}
+    df["Pessoa"] = df["Pessoa"].map(lambda x: CANON.get(str(x).strip(), str(x).strip()))
+    df["Início"] = pd.to_datetime(df.get("Início"), errors="coerce")
+    df["Fim"] = pd.to_datetime(df.get("Fim"), errors="coerce")
+    df = df.dropna(subset=["Início", "Fim"])
+    df = df[df["Pessoa"].isin(EQUIPE)]
+
+    if df.empty:
+        st.info("Ninguém preencheu as férias ainda. Baixe o modelo acima, "
+                "preencha Início/Fim e suba o arquivo no GitHub.")
+        return
+
+    df["Obs"] = df.get("Observação", "").fillna("") if "Observação" in df.columns else ""
+    # px.timeline é fim-exclusivo: soma 1 dia para o bloco cobrir o dia final
+    df["Fim_plot"] = df["Fim"] + pd.Timedelta(days=1)
+
+    ordem = [p for p in EQUIPE if p in set(df["Pessoa"])]
+    cmap = {p: PALETA[i % len(PALETA)] for i, p in enumerate(EQUIPE)}
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Pessoas com férias", df["Pessoa"].nunique())
+    c2.metric("Períodos", len(df))
+    dias_tot = int(((df["Fim"] - df["Início"]).dt.days + 1).sum())
+    c3.metric("Dias-pessoa", dias_tot)
+
+    fig = px.timeline(
+        df, x_start="Início", x_end="Fim_plot", y="Pessoa",
+        color="Pessoa", color_discrete_map=cmap,
+        custom_data=["Início", "Fim", "Obs"],
+    )
+    fig.update_traces(hovertemplate=(
+        "<b>%{y}</b><br>%{customdata[0]|%d/%m/%Y} – "
+        "%{customdata[1]|%d/%m/%Y}<br>%{customdata[2]}<extra></extra>"))
+    fig.update_yaxes(categoryorder="array", categoryarray=list(reversed(ordem)),
+                     title=None, gridcolor=BORDA)
+    fig.update_xaxes(gridcolor=BORDA, title=None, dtick="M1", tickformat="%b/%y")
+    fig.update_layout(
+        height=90 + 34 * len(ordem), margin=dict(t=10, b=10, l=10, r=10),
+        paper_bgcolor=BG, plot_bgcolor=BG, font=dict(color=TEXTO_DIM),
+        showlegend=False, bargap=0.35,
+    )
+
+    # sombrear janelas com 2+ pessoas de férias simultâneas
+    dias = pd.date_range(df["Início"].min(), df["Fim"].max(), freq="D")
+    por_dia = {d: [p for p, s, e in zip(df["Pessoa"], df["Início"], df["Fim"])
+                   if s <= d <= e] for d in dias}
+    janelas, cur = [], None
+    for d in dias:
+        quem = tuple(sorted(set(por_dia[d])))
+        if len(quem) >= 2:
+            if cur and cur["quem"] == quem:
+                cur["fim"] = d
+            else:
+                if cur:
+                    janelas.append(cur)
+                cur = {"ini": d, "fim": d, "quem": quem}
+        elif cur:
+            janelas.append(cur); cur = None
+    if cur:
+        janelas.append(cur)
+
+    for j in janelas:
+        fig.add_vrect(x0=j["ini"], x1=j["fim"] + pd.Timedelta(days=1),
+                      fillcolor=AZUL_CLARO, opacity=0.10, line_width=0, layer="below")
+
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    if janelas:
+        st.markdown("**Sobreposições**")
+        for j in janelas:
+            ini, fim = j["ini"].strftime("%d/%m"), j["fim"].strftime("%d/%m/%Y")
+            st.markdown(f'- {ini}–{fim} · {", ".join(j["quem"])}')
+    else:
+        st.caption("Sem sobreposições entre os períodos marcados.")
+
+
+# ============================================================
 # Main
 # ============================================================
 def main():
@@ -1095,9 +1206,9 @@ def main():
     if escopo == "Só entregáveis críticos":
         df_resp_f = df_resp_f[df_resp_f["eh_entregavel"]]
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
         ["Visão Geral", "Calendário", "Comunicação", "Alocação",
-         "Equipe", "Pesquisador", "Farol"])
+         "Equipe", "Pesquisador", "Farol", "Férias"])
     with tab1:
         aba_gantt(df_at_f)
     with tab2:
@@ -1112,6 +1223,8 @@ def main():
         aba_pesquisador(df_resp_f, df_aloc, df_pessoas)
     with tab7:
         aba_farol(df_aloc)
+    with tab8:
+        aba_ferias()
 
 
 if __name__ == "__main__":
