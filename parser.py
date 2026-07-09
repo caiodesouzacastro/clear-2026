@@ -23,7 +23,7 @@ NAME_MAP = {
     "bia b":"Bia B", "bia s":"Bia S",
     "caraol":"Carol", "carol":"Carol",
     "lycia":"Lycia","lorena":"Lorena","luan":"Luan","michel":"Michel",
-    "samu":"Samu","caio":"Caio","fred":"Fred","hisrael":"Hisrael","luigi":"Luigi",
+    "samu":"Samu", "samuely":"Samu", "samuely bezerra":"Samu","caio":"Caio","fred":"Fred","hisrael":"Hisrael","luigi":"Luigi",
 }
 # entidades externas mantidas como estão (não são pessoas do time)
 EXTERNAL = {"ifad","ove","ove/bid","bid","tce","sicredi","comitê gestor","comitê",
@@ -70,7 +70,7 @@ CANON = {"bia b":"Bia B","bia s":"Bia S","caio":"Caio","carol":"Carol",
          "fred":"Fred","hisrael":"Hisrael","julia":"Julia","júlia":"Julia","ju":"Julia",
          "junior":"Junior","júnior":"Junior","lorena":"Lorena","luan":"Luan",
          "luigi":"Luigi","luiggi":"Luigi","lycia":"Lycia","michel":"Michel","zinho":"Michel",
-         "samu":"Samu","samy":"Samu","pleno":"Fred","senior":"Hisrael","sênior":"Hisrael",
+         "samu":"Samu", "samuely":"Samu", "samuely bezerra":"Samu","samy":"Samu","pleno":"Fred","senior":"Hisrael","sênior":"Hisrael",
          "beatriz b":"Bia B","bai b":"Bia B","caraol":"Carol",
          "bias":"Bia S","biab":"Bia B","bia. s":"Bia S","bia. b":"Bia B"}
 # externos reais que devem ser preservados como responsáveis
