@@ -249,6 +249,29 @@ def _analisa_marco(alvo, radj, nos):
         nivel = "info"
         motivos.append("Este marco não tem dependências declaradas.")
 
+    # ---- Se ainda não há elo marcado, escolhe um "próximo a acontecer" ----
+    # Prioridade fallback: placeholder/sem-data > não-iniciado > cronológico
+    if indice_gargalo is None and len(cadeia) > 1:
+        # 1) placeholder ou sem data (etapa upstream)
+        for i, did in enumerate(cadeia[:-1]):
+            n = nos[did]
+            if n["fonte"] == "placeholder" or _prazo_date(n["prazo"]) is None:
+                indice_gargalo = i; break
+        # 2) primeira upstream ainda não iniciada
+        if indice_gargalo is None:
+            for i, did in enumerate(cadeia[:-1]):
+                if (nos[did]["status"] or "").strip().lower() == "não iniciado":
+                    indice_gargalo = i; break
+        # 3) primeira upstream ainda não concluída (em andamento etc.)
+        if indice_gargalo is None:
+            for i, did in enumerate(cadeia[:-1]):
+                st_ = (nos[did]["status"] or "").strip().lower()
+                if st_ not in ("concluído", "pronto", "enviado para eesp"):
+                    indice_gargalo = i; break
+        # 4) fallback final: primeira etapa upstream
+        if indice_gargalo is None:
+            indice_gargalo = 0
+
     return {"nivel": nivel, "motivos": motivos, "cadeia": cadeia,
             "indice_gargalo": indice_gargalo}
 
@@ -274,32 +297,44 @@ def _render_card(alvo, analise, nos):
     )
     st.markdown(header, unsafe_allow_html=True)
 
-    # cadeia — cada linha uma etapa
+    # cadeia — cada linha uma etapa, com indentação progressiva (escadinha)
     cadeia = analise["cadeia"]
     linhas = []
+    n_etapas = len(cadeia)
     for i, did in enumerate(cadeia):
         n = nos[did]
         st_norm = (n["status"] or "").strip().lower()
         icone = "📌" if did == alvo else _icone_status(n["status"])
-        cor_ativ = _cor_status(n["status"])
         prazo = _prazo_date(n["prazo"])
         prazo_lin = prazo.strftime("%d/%m") if prazo else "sem data"
         nome = n["atividade"] or "(sem nome)"
         gargalo_mark = ""
         if analise["indice_gargalo"] == i and did != alvo:
-            gargalo_mark = (f'<span style="color: {RISCO_COR[analise["nivel"]]}; '
-                            f'font-weight: 700; margin-left: 8px;">◀ gargalo</span>')
+            gargalo_mark = (f'<span style="color:{RISCO_COR[analise["nivel"]]}; '
+                            f'font-weight:700;margin-left:8px;font-size:12px;">'
+                            f'⚠️ elo crítico</span>')
         peso = 600 if did == alvo else 400
         cor_txt = TEXT if did == alvo else MUTED
         # projeto entre parênteses se for diferente do alvo
         proj_tag = ""
         if n["projeto"] != n_alvo["projeto"]:
-            proj_tag = (f'<span style="color: {MUTED}; font-size: 11px; '
-                        f'margin-left: 6px;">· {n["projeto"]}</span>')
-        divisor = (f"border-top:1px dashed {BORDER};margin-top:4px;padding-top:8px;"
+            proj_tag = (f'<span style="color:{MUTED};font-size:11px;'
+                        f'margin-left:6px;">· {n["projeto"]}</span>')
+        # indentação progressiva: cada etapa desce ~18px à direita
+        indent_px = i * 18
+        # linha vertical conectora (só nas etapas intermediárias, não no topo)
+        conector = ""
+        if i > 0:
+            conector = (f'<div style="position:absolute;left:{indent_px - 10}px;'
+                        f'top:-6px;width:2px;height:14px;background:{BORDER};"></div>'
+                        f'<div style="position:absolute;left:{indent_px - 10}px;'
+                        f'top:16px;width:12px;height:2px;background:{BORDER};"></div>')
+        divisor = (f"border-top:1px dashed {BORDER};margin-top:6px;padding-top:10px;"
                    if did == alvo else "")
         linha = (
-            f'<div style="display:flex;align-items:center;padding:4px 0;{divisor}">'
+            f'<div style="position:relative;padding:5px 0 5px {indent_px}px;{divisor}">'
+            f'{conector}'
+            f'<div style="display:flex;align-items:center;">'
             f'<span style="width:24px;font-size:14px;">{icone}</span>'
             f'<span style="flex:1;color:{cor_txt};font-weight:{peso};font-size:14px;">'
             f'{nome}{proj_tag}</span>'
@@ -307,10 +342,11 @@ def _render_card(alvo, analise, nos):
             f'font-family:monospace;">{prazo_lin}</span>'
             f'{gargalo_mark}'
             f'</div>'
+            f'</div>'
         )
         linhas.append(linha)
     st.markdown(
-        f'<div style="background:{PANEL};padding:4px 18px 10px 18px;'
+        f'<div style="background:{PANEL};padding:8px 18px 12px 18px;'
         f'border-left:5px solid {cor};">'
         + "".join(linhas) + "</div>",
         unsafe_allow_html=True,
