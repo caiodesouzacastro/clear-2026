@@ -346,7 +346,7 @@ def main():
 
     st.markdown(f"""
     <style>
-      .block-container {{ padding-top: 1.2rem; padding-bottom: 1rem; max-width: 1100px; }}
+      .block-container {{ padding-top: 1.2rem; padding-bottom: 1rem; max-width: 1200px; }}
       h1, h2, h3 {{ color: {TEXT}; }}
       .stTabs [data-baseweb="tab-list"] {{ gap: 4px; }}
       .stTabs [data-baseweb="tab"] {{
@@ -354,6 +354,13 @@ def main():
         padding: 8px 16px; font-weight: 500;
       }}
       .stTabs [aria-selected="true"] {{ background: {PANEL2}; color: {TEXT}; }}
+      /* filtros multiselect: chips em azul primário em vez do vermelho padrão */
+      .stMultiSelect [data-baseweb="tag"] {{
+        background-color: {PANEL2} !important;
+        border: 1px solid {PRIMARY} !important;
+      }}
+      .stMultiSelect [data-baseweb="tag"] span {{ color: {TEXT} !important; }}
+      .stMultiSelect [data-baseweb="tag"] svg {{ fill: {MUTED} !important; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -458,17 +465,17 @@ def main():
                 p = _prazo_date(a["prazo"])
                 a["_start"] = dt.datetime(p.year, p.month, p.day)
                 a["_end"] = a["_start"] + dt.timedelta(days=1)
-                a["_status_norm"] = str(a["status"]).strip()
+                a["Status"] = str(a["status"]).strip()
             fig = px.timeline(
                 filt, x_start="_start", x_end="_end", y="projeto",
-                color="_status_norm",
+                color="Status",
                 color_discrete_map={
                     "Concluído": "#5DCAA5", "Em Andamento": "#5090D3",
                     "Não Iniciado": "#6F7E8C", "Atrasado": "#E57373",
                     "Reunião": "#B39DDB"},
                 hover_data={"atividade": True, "responsaveis": True, "sub": True,
                             "_start": False, "_end": False, "projeto": False,
-                            "_status_norm": True},
+                            "Status": True},
                 height=max(360, 34 * len(sel_projs) + 120))
             ent = [a for a in filt if a["eh_entregavel"]]
             if ent:
@@ -493,22 +500,120 @@ def main():
 
     # ---------------------------------------------------------- Tab 3
     with t3:
-        st.subheader("Arestas que cruzam projeto")
-        inter = [e for e in edges if nos[e["o"]]["projeto"] != nos[e["d"]]["projeto"]]
-        st.caption(f"{len(inter)} de {len(edges)} arestas são inter-projeto.")
-        for e in inter:
-            st.markdown(f"- **{nos[e['o']]['atividade']}** "
-                        f"*({nos[e['o']]['projeto']})* → "
-                        f"**{nos[e['d']]['atividade']}** "
-                        f"*({nos[e['d']]['projeto']})* — "
-                        f"{e['tipo']}/{e['forca']}")
-        st.divider()
-        st.subheader("🚩 Flags — pendências")
-        if flags:
+        colL, colR = st.columns(2, gap="large")
+
+        # ----- ESQUERDA: panorama (matriz projeto × projeto) -----
+        with colL:
+            st.markdown("### 🔀 Panorama")
+            st.caption("Quantas dependências cruzam entre cada par de projetos.")
+            inter = [e for e in edges
+                     if nos[e["o"]]["projeto"] != nos[e["d"]]["projeto"]]
+            projs_env = sorted(
+                {nos[e["o"]]["projeto"] for e in inter}
+                | {nos[e["d"]]["projeto"] for e in inter}
+            )
+            if not inter:
+                st.info("Nenhuma dependência inter-projeto declarada ainda.")
+            else:
+                # matriz de contagem: linhas = destravador, colunas = travado
+                mat = {p: {q: 0 for q in projs_env} for p in projs_env}
+                for e in inter:
+                    mat[nos[e["o"]]["projeto"]][nos[e["d"]]["projeto"]] += 1
+                # nomes curtos p/ caber na célula
+                curto = {p: (p[:14] + "…") if len(p) > 15 else p for p in projs_env}
+                # cabeçalho
+                cel_stl = (f"padding:8px 6px;border:1px solid {BORDER};"
+                           f"text-align:center;font-size:12px;")
+                head_stl = cel_stl + f"background:{PANEL2};color:{MUTED};font-weight:600;"
+                linhas_html = [
+                    f'<table style="border-collapse:collapse;width:100%;'
+                    f'font-family:Arial;">',
+                    "<tr>",
+                    f'<td style="{head_stl}"></td>',
+                ]
+                for q in projs_env:
+                    linhas_html.append(
+                        f'<td style="{head_stl}" title="{q}">↓ {curto[q]}</td>'
+                    )
+                linhas_html.append("</tr>")
+                for p in projs_env:
+                    linhas_html.append(
+                        f'<tr><td style="{head_stl}" title="{p}">→ {curto[p]}</td>'
+                    )
+                    for q in projs_env:
+                        n = mat[p][q]
+                        if p == q:
+                            cor_bg, txt = PANEL, "—"
+                        elif n == 0:
+                            cor_bg, txt = PANEL, ""
+                        else:
+                            # intensidade pelo número
+                            cor_bg = PRIMARY if n >= 2 else PANEL2
+                            txt = f'<b style="color:{TEXT};">{n}</b>'
+                        linhas_html.append(
+                            f'<td style="{cel_stl}background:{cor_bg};">{txt}</td>'
+                        )
+                    linhas_html.append("</tr>")
+                linhas_html.append("</table>")
+                st.markdown("".join(linhas_html), unsafe_allow_html=True)
+                st.caption(f"Linha destrava · coluna depende · "
+                           f"{len(inter)} arestas em {len(projs_env)} projetos.")
+
+                with st.expander(f"Ver as {len(inter)} dependências"):
+                    for e in inter:
+                        st.markdown(
+                            f"- **{nos[e['o']]['atividade']}** "
+                            f"*({nos[e['o']]['projeto']})* → "
+                            f"**{nos[e['d']]['atividade']}** "
+                            f"*({nos[e['d']]['projeto']})*"
+                        )
+
+        # ----- DIREITA: gaps a fechar -----
+        with colR:
+            st.markdown("### 🚩 Gaps a fechar")
+            st.caption("O que precisa ser preenchido pra o mapa crescer.")
+
+            # classifica flags por tipo declarado
+            por_tipo = collections.defaultdict(list)
             for f in flags:
-                st.markdown(f"- **{f['item']}** *({f['tipo']})* — {f['nota']}")
-        else:
-            st.caption("_sem flags_")
+                por_tipo[f["tipo"] or "outro"].append(f)
+
+            # projetos sem entregável (mineração no Master)
+            projs_master = {a["projeto"] for a in atividades}
+            projs_com_no = {n["projeto"] for n in nos.values()
+                            if n["fonte"] != "placeholder"}
+            sem_no = sorted(projs_master - projs_com_no - {"(sem projeto)"})
+
+            # blocos ordenados por prioridade prática
+            blocos = [
+                ("🔴 Datas erradas / inconsistências",
+                 [f for f in flags if f["tipo"] == "data"]),
+                ("🟠 Placeholders a formalizar",
+                 [f for f in flags if f["tipo"] == "placeholder"]),
+                ("⚪ Projetos ou nós faltando",
+                 [f for f in flags if f["tipo"] in ("gap de nó", "gap de data")]),
+            ]
+
+            for titulo, itens in blocos:
+                if not itens: continue
+                st.markdown(f"**{titulo}**")
+                for f in itens:
+                    st.markdown(
+                        f'<div style="background:{PANEL};border-left:3px solid '
+                        f'{BORDER};padding:8px 12px;margin:4px 0;border-radius:4px;">'
+                        f'<div style="color:{TEXT};font-size:13px;font-weight:600;">'
+                        f'{f["item"]}</div>'
+                        f'<div style="color:{MUTED};font-size:12px;margin-top:2px;">'
+                        f'{f["nota"]}</div></div>',
+                        unsafe_allow_html=True,
+                    )
+
+            if sem_no:
+                st.markdown("**⚫ Projetos sem entregável declarado**")
+                st.caption("Estão no Master mas não têm nó no grafo — "
+                           "não dá pra ancorar dependência.")
+                for p in sem_no:
+                    st.markdown(f"- {p}")
 
 
 if __name__ == "__main__":
