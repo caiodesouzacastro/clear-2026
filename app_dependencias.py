@@ -1,15 +1,14 @@
 """
-CLEAR 2026 — Cadeia de Dependências (v3, timeline conectada)
+CLEAR 2026 — Cadeia de Dependências (v4, cards de cascata)
 
-Formato: cada entregável é um ponto num eixo de tempo (posicionado pelo prazo),
-agrupado por projeto na vertical. As arestas viram linhas curvas.
-Nós sem data ficam empilhados à direita numa "faixa sem data".
+Não é grafo. Cada marco com dependências vira um CARD colorido por risco.
+Card mostra a cadeia upstream em ordem cronológica, aponta o gargalo,
+e explica em linguagem natural por que está em risco.
 
-Quatro abas:
-  1. Impacto a jusante  (timeline conectada; escolhe um nó → cadeia downstream)
-  2. Caminho crítico    (mesmo eixo; ilumina a corrente mais longa)
-  3. Todas as atividades (as 736 do Master, Gantt por projeto)
-  4. Inter-projetos & flags
+Três abas:
+  1. Cascatas          (cards, ordenáveis por risco ou por data)
+  2. Todas as atividades (timeline das 736 do Master)
+  3. Inter-projetos & flags
 """
 
 import collections
@@ -25,7 +24,7 @@ BASE = Path(__file__).parent
 MASTER = BASE / "CLEAR_Master_2026.xlsx"
 DEPS = BASE / "Dependencias_CLEAR_2026.xlsx"
 
-# -------------------------------------------------------------------- paleta
+# ---- paleta base do repo (config.toml)
 BG        = "#0A1929"
 PANEL     = "#132F4C"
 PANEL2    = "#1E3A5F"
@@ -34,37 +33,36 @@ TEXT      = "#FFFFFF"
 MUTED     = "#B2BAC2"
 BORDER    = "#26456B"
 
-# cores de status com MAIS contraste do que o app original, p/ o grafo ficar legível
-# (mantém o mesmo idioma cromático, mas espaça os tons)
-STATUS_COR = {
-    "concluído":         "#5DCAA5",   # verde-água — se destaca sem virar semáforo
-    "pronto":            "#5DCAA5",
-    "enviado para eesp": "#5DCAA5",
-    "em andamento":      "#5090D3",   # azul primário
-    "não iniciado":      "#6F7E8C",   # cinza (não é o foco)
-    "atrasado":          "#E57373",   # vermelho — agora atrasado grita
-    "reunião":           "#B39DDB",
+# ---- cores de risco (contraste real p/ gritar o gargalo)
+RISCO_COR = {
+    "critico":  "#E57373",   # vermelho
+    "atencao":  "#E5A84B",   # âmbar
+    "ok":       "#5DCAA5",   # verde-água
+    "info":     "#6F7E8C",   # cinza (sem dep upstream)
 }
-COR_PLACEHOLDER = "#D4A55E"
-COR_DESCONHECIDO = "#6F7E8C"
-COR_FADE = "#26456B"
-COR_LINHA_ARESTA = "#3D6A9E"
-COR_LINHA_DESTAQUE = "#7BB3F0"
+RISCO_ICONE = {"critico": "🔴", "atencao": "🟡", "ok": "🟢", "info": "⚪"}
+RISCO_LABEL = {"critico": "CRÍTICO", "atencao": "ATENÇÃO",
+               "ok": "TRANQUILO", "info": "SEM RISCO IDENTIFICADO"}
+RISCO_ORDEM = {"critico": 0, "atencao": 1, "ok": 2, "info": 3}
+
+STATUS_ICONE = {
+    "concluído": "🟢", "pronto": "🟢", "enviado para eesp": "🟢",
+    "em andamento": "🔵",
+    "atrasado": "🔴",
+    "não iniciado": "⚪", "reunião": "⚫",
+}
+
+STATUS_COR = {
+    "concluído": "#5DCAA5", "pronto": "#5DCAA5", "enviado para eesp": "#5DCAA5",
+    "em andamento": "#5090D3",
+    "não iniciado": "#6F7E8C",
+    "atrasado": "#E57373",
+    "reunião": "#B39DDB",
+}
 
 DERIVAVEIS = {"Painel CLEAR", "EVALAC"}
-
-
-def _status_norm(s):
-    if not s: return ""
-    return str(s).strip()
-
-
-def _cor_status(status_txt, fonte=None):
-    if fonte == "placeholder":
-        return COR_PLACEHOLDER
-    if not status_txt:
-        return COR_DESCONHECIDO
-    return STATUS_COR.get(status_txt.strip().lower(), COR_DESCONHECIDO)
+HOJE = dt.date.today()
+JANELA_ATENCAO = dt.timedelta(days=21)   # marco a <=21 dias com upstream 'não iniciado'
 
 
 # ============================================================ auth
@@ -90,8 +88,7 @@ def carregar():
     ws = wm["Atividades"]
     hdr = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))]
     H = {h: i for i, h in enumerate(hdr)}
-    master = {}
-    atividades = []
+    master, atividades = {}, []
     for r in ws.iter_rows(min_row=2, values_only=True):
         proj, ativ, det = r[H["projeto"]], r[H["atividade"]], r[H["detalhe"]]
         info = {"status": r[H["status"]], "prazo": r[H["prazo"]],
@@ -121,28 +118,18 @@ def carregar():
         }
     edges = []
     for r in wd["Arestas"].iter_rows(min_row=2, values_only=True):
-        if not r[0] or not r[1]:
-            continue
-        edges.append({"o": r[0], "d": r[1],
-                      "tipo": r[2] or "insumo", "forca": r[3] or "dura",
-                      "nota": r[5] or ""})
-
-    derivadas = []
-    for proj in DERIVAVEIS:
-        ns = [d for d, n in nos.items() if n["projeto"] == proj and not n["orfao"]]
-        ns.sort(key=lambda d: (nos[d]["prazo"] is None, str(nos[d]["prazo"])))
-        derivadas += [{"o": a, "d": b} for a, b in zip(ns, ns[1:])]
-
+        if r[0] and r[1]:
+            edges.append({"o": r[0], "d": r[1], "tipo": r[2] or "insumo",
+                          "forca": r[3] or "dura", "nota": r[5] or ""})
     flags = []
     if "Flags" in wd.sheetnames:
         for r in wd["Flags"].iter_rows(min_row=2, values_only=True):
             if r[0]:
                 flags.append({"item": r[0], "tipo": r[1] or "", "nota": r[2] or ""})
+    return nos, edges, atividades, flags
 
-    return nos, edges, derivadas, atividades, flags
 
-
-# ============================================================ grafo (só p/ álgebra)
+# ============================================================ helpers
 def _grafo(edges):
     adj, radj = collections.defaultdict(list), collections.defaultdict(list)
     for e in edges:
@@ -150,205 +137,205 @@ def _grafo(edges):
     return adj, radj
 
 
-def _downstream(adj, s):
-    seen, st = set(), [s]
-    while st:
-        u = st.pop()
-        for v in adj[u]:
-            if v not in seen:
-                seen.add(v); st.append(v)
-    return seen
-
-
-def _caminho_mais_longo(radj, t):
-    memo = {}
-    def dfs(u):
-        if u in memo: return memo[u]
-        if not radj[u]:
-            memo[u] = [u]; return memo[u]
-        memo[u] = max((dfs(p) for p in radj[u]), key=len) + [u]
-        return memo[u]
-    return dfs(t)
-
-
-# ============================================================ TIMELINE conectada
-def _prazo_dt(p):
-    """Normaliza prazo pra datetime (aceita date, datetime, string)."""
+def _prazo_date(p):
     if p is None: return None
-    if isinstance(p, dt.datetime): return p
-    if isinstance(p, dt.date): return dt.datetime(p.year, p.month, p.day)
-    try: return dt.datetime.fromisoformat(str(p)[:10])
+    if isinstance(p, dt.datetime): return p.date()
+    if isinstance(p, dt.date): return p
+    try: return dt.date.fromisoformat(str(p)[:10])
     except Exception: return None
 
 
-def _timeline_conectada(nos, edges, *, destaque_nos=None, destaque_arestas=None,
-                        titulo=""):
+def _cor_status(status_txt):
+    if not status_txt: return "#6F7E8C"
+    return STATUS_COR.get(status_txt.strip().lower(), "#6F7E8C")
+
+
+def _icone_status(status_txt):
+    if not status_txt: return "⚪"
+    return STATUS_ICONE.get(status_txt.strip().lower(), "⚪")
+
+
+def _cadeia_upstream(radj, alvo, nos):
     """
-    Cada nó = ponto (x=prazo, y=projeto). Nós sem data ficam empilhados numa
-    faixa 'sem data' à direita. Arestas viram linhas curvas.
+    Traça a cadeia de dependências chegando até `alvo`, em ordem cronológica
+    (upstream mais cedo primeiro). Se houver várias origens, mescla por data.
+    Retorna lista de dep_ids terminando em `alvo`.
     """
-    destaque_nos = destaque_nos or set()
-    destaque_arestas = destaque_arestas or set()
-    tem_destaque = bool(destaque_nos)
-
-    # projetos: ordena por prazo mediano (projetos "cedo" no topo)
-    por_proj = collections.defaultdict(list)
-    for d, n in nos.items():
-        por_proj[n["projeto"] or "(sem projeto)"].append(d)
-    def med_prazo(dids):
-        ds = sorted([_prazo_dt(nos[d]["prazo"]) for d in dids
-                     if _prazo_dt(nos[d]["prazo"])])
-        return ds[len(ds)//2] if ds else dt.datetime(2099, 1, 1)
-    proj_ordem = sorted(por_proj, key=lambda p: med_prazo(por_proj[p]))
-    proj_y = {p: i for i, p in enumerate(proj_ordem)}
-
-    # eixo x: min/max de prazos reais + coluna extra p/ "sem data"
-    todas_datas = [d for d in (_prazo_dt(n["prazo"]) for n in nos.values()) if d]
-    if todas_datas:
-        dmin, dmax = min(todas_datas), max(todas_datas)
-        span = (dmax - dmin).days or 30
-        margem = dt.timedelta(days=max(int(span * 0.05), 4))
-        x_sem_data = dmax + dt.timedelta(days=max(int(span * 0.12), 10))
-    else:
-        dmin = dt.datetime.today(); dmax = dmin
-        margem = dt.timedelta(days=5); x_sem_data = dmin + dt.timedelta(days=15)
-
-    # posições dos nós; empilha "sem data" com pequeno jitter vertical
-    pos = {}
-    empilhados = collections.Counter()
-    for did, n in nos.items():
-        y = proj_y[n["projeto"] or "(sem projeto)"]
-        p = _prazo_dt(n["prazo"])
-        if p is None:
-            k = empilhados[y]; empilhados[y] += 1
-            pos[did] = (x_sem_data + dt.timedelta(days=k * 3), y + 0.06 * k)
-        else:
-            pos[did] = (p, y)
-
-    fig = go.Figure()
-
-    # ------ arestas: linha curva (quadrática) via 20 pontos
-    def curva(x0, y0, x1, y1, bend=0.35):
-        # ponto de controle no meio, com desvio proporcional à distância vertical
-        # se dy≠0 encurva pra fora; se dy=0 encurva um pouco pra baixo
-        dy = y1 - y0
-        cx = x0 + (x1 - x0) / 2
-        cy = (y0 + y1) / 2 + (bend if dy == 0 else 0)
-        # bezier quadrática amostrada
-        xs, ys = [], []
-        for i in range(21):
-            t = i / 20
-            xt = (1 - t) ** 2 * (x0.timestamp() if hasattr(x0, "timestamp") else x0) \
-                 + 2 * (1 - t) * t * (cx.timestamp() if hasattr(cx, "timestamp") else cx) \
-                 + t ** 2 * (x1.timestamp() if hasattr(x1, "timestamp") else x1)
-            yt = (1 - t) ** 2 * y0 + 2 * (1 - t) * t * cy + t ** 2 * y1
-            xs.append(dt.datetime.fromtimestamp(xt))
-            ys.append(yt)
-        return xs, ys
-
-    def _placeholder(did):
-        return nos[did]["fonte"] == "placeholder"
-
-    for e in edges:
-        if e["o"] not in pos or e["d"] not in pos:
-            continue
-        (x0, y0), (x1, y1) = pos[e["o"]], pos[e["d"]]
-        destacada = (e["o"], e["d"]) in destaque_arestas
-        pontilhada = _placeholder(e["o"]) or _placeholder(e["d"]) \
-                     or nos[e["o"]]["prazo"] is None or nos[e["d"]]["prazo"] is None
-        if destacada:
-            cor, w = COR_LINHA_DESTAQUE, 3
-        elif tem_destaque:
-            cor, w = BORDER, 1
-        else:
-            cor, w = COR_LINHA_ARESTA, 1.5
-        xs, ys = curva(x0, y0, x1, y1)
-        fig.add_trace(go.Scatter(
-            x=xs, y=ys, mode="lines",
-            line=dict(color=cor, width=w, dash="dot" if pontilhada else "solid"),
-            hoverinfo="skip", showlegend=False,
-        ))
-        # ponta da seta (triângulo pequeno perto do destino)
-        fig.add_trace(go.Scatter(
-            x=[xs[-2], xs[-1]], y=[ys[-2], ys[-1]], mode="lines",
-            line=dict(color=cor, width=w + 1),
-            hoverinfo="skip", showlegend=False,
-        ))
-
-    # ------ nós: um scatter por status pra ter legenda
-    grupos = collections.defaultdict(list)
-    for did, n in nos.items():
-        chave = ("PLACEHOLDER" if n["fonte"] == "placeholder"
-                 else _status_norm(n["status"]) or "Não Iniciado")
-        grupos[chave].append(did)
-
-    for chave, dids in grupos.items():
-        xs, ys, texts, hovers, cores, bordas, tamanhos = [], [], [], [], [], [], []
-        for did in dids:
-            x, y = pos[did]
-            n = nos[did]
-            fade = tem_destaque and did not in destaque_nos
-            cor = COR_FADE if fade else _cor_status(n["status"], n["fonte"])
-            borda = BORDER if fade else (PRIMARY if did in destaque_nos else BG)
-            tamanho = 24 if did in destaque_nos else 18
-            xs.append(x); ys.append(y)
-            nome = (n["atividade"] or "")[:38]
-            texts.append(f"<b>{nome}</b>")
-            prazo_txt = (_prazo_dt(n["prazo"]).date().isoformat()
-                         if _prazo_dt(n["prazo"]) else "sem data")
-            hovers.append(
-                f"<b>{n['atividade']}</b><br>"
-                f"{n['projeto']}<br>"
-                f"prazo: {prazo_txt}<br>"
-                f"status: {n['status'] or '—'}<br>"
-                f"<i>{did}</i>"
-            )
-            cores.append(cor); bordas.append(borda); tamanhos.append(tamanho)
-        fig.add_trace(go.Scatter(
-            x=xs, y=ys, mode="markers+text",
-            marker=dict(size=tamanhos, color=cores,
-                        line=dict(color=bordas, width=2)),
-            text=texts, textposition="middle right",
-            textfont=dict(color=TEXT, size=11, family="Arial"),
-            hovertext=hovers, hoverinfo="text",
-            name=chave, showlegend=True,
-        ))
-
-    # linha vertical separando "com data" de "sem data"
-    if any(nos[d]["prazo"] is None for d in nos):
-        fig.add_vline(x=(dmax + margem), line_dash="dot",
-                      line_color=BORDER, line_width=1)
-        fig.add_annotation(x=x_sem_data, y=-0.7, text="sem data",
-                           showarrow=False, font=dict(color=MUTED, size=10))
-
-    n_proj = len(proj_ordem)
-    fig.update_layout(
-        title=dict(text=titulo, font=dict(color=TEXT, size=14), x=0.01),
-        plot_bgcolor=BG, paper_bgcolor=BG,
-        font=dict(color=TEXT, family="Arial", size=11),
-        legend=dict(bgcolor=PANEL, bordercolor=BORDER, borderwidth=1,
-                    orientation="h", yanchor="bottom", y=1.02, x=0),
-        margin=dict(l=8, r=200, t=40, b=8),
-        height=max(420, 90 * n_proj + 120),
-        xaxis=dict(
-            gridcolor=PANEL2, zerolinecolor=PANEL2,
-            range=[dmin - margem, x_sem_data + dt.timedelta(days=8)],
-            tickformat="%b/%y",
-        ),
-        yaxis=dict(
-            gridcolor=PANEL2, zerolinecolor=PANEL2,
-            tickmode="array",
-            tickvals=list(proj_y.values()),
-            ticktext=proj_ordem,
-            autorange="reversed",
-        ),
-        hoverlabel=dict(bgcolor=PANEL, bordercolor=PRIMARY,
-                        font=dict(color=TEXT, family="Arial")),
+    visitados = set()
+    def coleta(u):
+        if u in visitados: return
+        visitados.add(u)
+        for p in radj[u]:
+            coleta(p)
+    coleta(alvo)
+    ordem = sorted(
+        visitados - {alvo},
+        key=lambda d: (_prazo_date(nos[d]["prazo"]) or dt.date(2099, 1, 1),
+                       nos[d]["projeto"] or "")
     )
-    return fig
+    return ordem + [alvo]
 
 
-# ============================================================ UI
+# ============================================================ análise de risco
+def _analisa_marco(alvo, radj, nos):
+    """
+    Retorna dict com nivel de risco + lista de motivos + índice do gargalo
+    (posição na cadeia). Regras:
+      - upstream ATRASADO ou marco ATRASADO             → crítico
+      - inconsistência de data (upstream > marco)       → crítico
+      - marco depende de nó sem data / placeholder      → atenção
+      - marco a <=21 dias com upstream 'não iniciado'   → atenção
+      - inter-projeto                                   → adiciona "atenção" se ainda ok
+    """
+    cadeia = _cadeia_upstream(radj, alvo, nos)
+    motivos, indice_gargalo = [], None
+    nivel = "ok"
+    n_alvo = nos[alvo]
+    prazo_alvo = _prazo_date(n_alvo["prazo"])
+
+    for i, did in enumerate(cadeia):
+        n = nos[did]
+        st_norm = (n["status"] or "").strip().lower()
+        prazo = _prazo_date(n["prazo"])
+
+        if st_norm == "atrasado":
+            nivel = "critico"
+            motivos.append(f"**{n['atividade']}** está atrasada.")
+            if indice_gargalo is None: indice_gargalo = i
+
+        if did != alvo and prazo and prazo_alvo and prazo > prazo_alvo:
+            nivel = "critico"
+            motivos.append(
+                f"⚠️ Inconsistência de data: **{n['atividade']}** ({prazo.strftime('%d/%m')}) "
+                f"depende de algo posterior à data do marco final "
+                f"({prazo_alvo.strftime('%d/%m')})."
+            )
+            if indice_gargalo is None: indice_gargalo = i
+
+        if did != alvo and n["fonte"] == "placeholder":
+            if nivel == "ok": nivel = "atencao"
+            motivos.append(f"Depende de placeholder: **{n['atividade']}** — a formalizar no cronograma.")
+            if indice_gargalo is None: indice_gargalo = i
+
+        if did != alvo and prazo is None and n["fonte"] != "placeholder":
+            if nivel == "ok": nivel = "atencao"
+            motivos.append(f"**{n['atividade']}** ainda não tem prazo definido.")
+            if indice_gargalo is None: indice_gargalo = i
+
+    # marco final sem data mas com upstream: atenção
+    if prazo_alvo is None and len(cadeia) > 1 and nivel == "ok":
+        nivel = "atencao"
+        motivos.append("Marco final ainda não tem prazo definido.")
+
+    # marco próximo com upstream não iniciado
+    if prazo_alvo and 0 <= (prazo_alvo - HOJE).days <= JANELA_ATENCAO.days:
+        atrasa = [d for d in cadeia[:-1]
+                  if (nos[d]["status"] or "").strip().lower() == "não iniciado"
+                  and nos[d]["fonte"] != "placeholder"]
+        if atrasa and nivel == "ok":
+            nivel = "atencao"
+            nomes = ", ".join(f"**{nos[d]['atividade']}**" for d in atrasa[:3])
+            motivos.append(f"Marco em {prazo_alvo.strftime('%d/%m')} "
+                           f"({(prazo_alvo-HOJE).days} dias) com upstream não iniciado: {nomes}.")
+            if indice_gargalo is None:
+                indice_gargalo = cadeia.index(atrasa[0])
+
+    # inter-projeto adiciona nota mas não muda nível se já era 'ok'
+    projs = {nos[d]["projeto"] for d in cadeia}
+    if len(projs) > 1:
+        motivos.append(f"Cadeia atravessa {len(projs)} projetos: {', '.join(sorted(projs))}.")
+
+    if not motivos and len(cadeia) == 1:
+        nivel = "info"
+        motivos.append("Este marco não tem dependências declaradas.")
+
+    return {"nivel": nivel, "motivos": motivos, "cadeia": cadeia,
+            "indice_gargalo": indice_gargalo}
+
+
+# ============================================================ UI: card
+def _render_card(alvo, analise, nos):
+    n_alvo = nos[alvo]
+    cor = RISCO_COR[analise["nivel"]]
+    prazo_alvo = _prazo_date(n_alvo["prazo"])
+    prazo_txt = prazo_alvo.strftime("%d/%m/%Y") if prazo_alvo else "sem data"
+
+    # cabeçalho do card
+    header = f"""
+    <div style="border-left: 5px solid {cor}; background: {PANEL};
+                padding: 14px 18px; border-radius: 6px; margin-bottom: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <div>
+          <span style="color: {cor}; font-weight: 700; font-size: 12px;
+                       letter-spacing: 1px;">
+            {RISCO_ICONE[analise['nivel']]} {RISCO_LABEL[analise['nivel']]}
+          </span>
+          <div style="color: {TEXT}; font-size: 17px; font-weight: 600; margin-top: 4px;">
+            {n_alvo['atividade']}
+          </div>
+          <div style="color: {MUTED}; font-size: 13px; margin-top: 2px;">
+            {n_alvo['projeto']} · entrega {prazo_txt}
+          </div>
+        </div>
+      </div>
+    """
+    st.markdown(header, unsafe_allow_html=True)
+
+    # cadeia — cada linha uma etapa
+    cadeia = analise["cadeia"]
+    linhas = []
+    for i, did in enumerate(cadeia):
+        n = nos[did]
+        st_norm = (n["status"] or "").strip().lower()
+        icone = "📌" if did == alvo else _icone_status(n["status"])
+        cor_ativ = _cor_status(n["status"])
+        prazo = _prazo_date(n["prazo"])
+        prazo_lin = prazo.strftime("%d/%m") if prazo else "sem data"
+        nome = n["atividade"] or "(sem nome)"
+        gargalo_mark = ""
+        if analise["indice_gargalo"] == i and did != alvo:
+            gargalo_mark = (f'<span style="color: {RISCO_COR[analise["nivel"]]}; '
+                            f'font-weight: 700; margin-left: 8px;">◀ gargalo</span>')
+        peso = 600 if did == alvo else 400
+        cor_txt = TEXT if did == alvo else MUTED
+        # projeto entre parênteses se for diferente do alvo
+        proj_tag = ""
+        if n["projeto"] != n_alvo["projeto"]:
+            proj_tag = (f'<span style="color: {MUTED}; font-size: 11px; '
+                        f'margin-left: 6px;">· {n["projeto"]}</span>')
+        linhas.append(f"""
+          <div style="display: flex; align-items: center; padding: 4px 0;
+                      {'border-top: 1px dashed ' + BORDER + '; margin-top: 4px; padding-top: 8px;'
+                       if did == alvo else ''}">
+            <span style="width: 24px; font-size: 14px;">{icone}</span>
+            <span style="flex: 1; color: {cor_txt}; font-weight: {peso}; font-size: 14px;">
+              {nome}{proj_tag}
+            </span>
+            <span style="color: {MUTED}; font-size: 12px; margin-left: 10px;
+                         font-family: monospace;">{prazo_lin}</span>
+            {gargalo_mark}
+          </div>
+        """)
+    st.markdown(f'<div style="background: {PANEL}; padding: 4px 18px 10px 18px;">'
+                + "".join(linhas) + "</div>",
+                unsafe_allow_html=True)
+
+    # motivos
+    if analise["motivos"]:
+        pontos = "".join(f"<li>{m}</li>" for m in analise["motivos"])
+        st.markdown(f"""
+        <div style="background: {PANEL}; padding: 10px 18px 16px 18px;
+                    border-radius: 0 0 6px 6px; margin-bottom: 12px;">
+          <div style="color: {MUTED}; font-size: 12px; text-transform: uppercase;
+                      letter-spacing: 1px; margin-bottom: 4px;">Por quê</div>
+          <ul style="color: {TEXT}; font-size: 13px; margin: 0; padding-left: 18px;
+                     line-height: 1.6;">{pontos}</ul>
+        </div>
+        """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ============================================================ UI: main
 def main():
     st.set_page_config(page_title="CLEAR 2026 · Dependências",
                        page_icon="🔗", layout="wide",
@@ -356,7 +343,7 @@ def main():
 
     st.markdown(f"""
     <style>
-      .block-container {{ padding-top: 1.2rem; padding-bottom: 1rem; max-width: 100%; }}
+      .block-container {{ padding-top: 1.2rem; padding-bottom: 1rem; max-width: 1100px; }}
       h1, h2, h3 {{ color: {TEXT}; }}
       .stTabs [data-baseweb="tab-list"] {{ gap: 4px; }}
       .stTabs [data-baseweb="tab"] {{
@@ -368,15 +355,14 @@ def main():
     """, unsafe_allow_html=True)
 
     st.title("🔗 Cadeia de Dependências — CLEAR 2026")
-    st.caption("Cada ponto = um entregável posicionado pela sua data de entrega. "
-               "Linhas conectam **quem destrava quem** (esquerda destrava direita). "
-               "Linhas pontilhadas = alguma ponta ainda sem data.")
+    st.caption("Cada card mostra um marco final e a cadeia que precisa acontecer antes. "
+               "A cor indica o risco.")
 
     if not _senha_ok():
         st.stop()
 
     try:
-        nos, edges, derivadas, atividades, flags = carregar()
+        nos, edges, atividades, flags = carregar()
     except FileNotFoundError as e:
         st.error(f"Arquivo não encontrado: {e.filename}"); st.stop()
 
@@ -386,62 +372,62 @@ def main():
 
     adj, radj = _grafo(edges)
 
-    def rotulo(d):
-        return f"{nos[d]['atividade'][:52]}  ({d})"
+    # marcos finais = qualquer nó com dependência upstream (radj não vazio)
+    marcos = sorted(d for d in nos if radj[d])
+    analises = {d: _analisa_marco(d, radj, nos) for d in marcos}
 
-    t1, t2, t3, t4 = st.tabs([
-        "⬇️ Impacto a jusante",
-        "🎯 Caminho crítico",
+    t1, t2, t3 = st.tabs([
+        "📋 Cascatas",
         "📅 Todas as atividades",
         "🔀 Inter-projetos & flags",
     ])
 
     # ---------------------------------------------------------- Tab 1
     with t1:
-        col1, col2 = st.columns([3, 1])
-        candidatos = sorted(d for d in nos if adj[d] or radj[d])
-        with col1:
-            alvo = st.selectbox("Se esta atividade atrasar, o que cai junto?",
-                                candidatos, format_func=rotulo, key="t1_sel")
-        down = _downstream(adj, alvo)
-        destaque = {alvo} | down
-        arestas_dest = {(e["o"], e["d"]) for e in edges
-                        if e["o"] in destaque and e["d"] in destaque}
-        chegadas = sorted(d for d in down if not adj[d])
-        with col2:
-            st.metric("Atividades afetadas", len(down))
-            if chegadas:
-                st.markdown("**Marcos atingidos:**")
-                for d in chegadas:
-                    st.markdown(f"- {nos[d]['atividade'][:36]}")
-        st.plotly_chart(
-            _timeline_conectada(nos, edges,
-                                destaque_nos=destaque,
-                                destaque_arestas=arestas_dest),
-            use_container_width=True, config={"displayModeBar": False},
-        )
+        # contagem por risco
+        conta = collections.Counter(a["nivel"] for a in analises.values())
+        col1, col2, col3, col4, col5 = st.columns([1.2, 1.2, 1.2, 1.2, 2.2])
+        col1.metric("🔴 Crítico", conta.get("critico", 0))
+        col2.metric("🟡 Atenção", conta.get("atencao", 0))
+        col3.metric("🟢 Tranquilo", conta.get("ok", 0))
+        col4.metric("⚪ Total marcos", len(marcos))
+        with col5:
+            ordem = st.radio("Ordem", ["Por risco", "Por data do marco"],
+                             horizontal=True, label_visibility="collapsed")
+
+        # busca
+        busca = st.text_input("🔎 buscar", placeholder="filtrar por texto (ex.: 'painel', 'guias')",
+                              label_visibility="collapsed").strip().lower()
+
+        # ordena
+        if ordem == "Por risco":
+            def key(d):
+                pr = _prazo_date(nos[d]["prazo"]) or dt.date(2099, 1, 1)
+                return (RISCO_ORDEM[analises[d]["nivel"]], pr, nos[d]["projeto"] or "")
+        else:
+            def key(d):
+                pr = _prazo_date(nos[d]["prazo"]) or dt.date(2099, 1, 1)
+                return (pr, RISCO_ORDEM[analises[d]["nivel"]], nos[d]["projeto"] or "")
+        marcos_ord = sorted(marcos, key=key)
+
+        # filtra
+        def bate(d):
+            if not busca: return True
+            corpo = " ".join([nos[d]["atividade"] or "", nos[d]["projeto"] or ""]
+                             + [nos[u]["atividade"] or "" for u in analises[d]["cadeia"]])
+            return busca in corpo.lower()
+
+        vistos = 0
+        for d in marcos_ord:
+            if not bate(d): continue
+            _render_card(d, analises[d], nos)
+            vistos += 1
+        if vistos == 0:
+            st.info("Nada bate com esse filtro.")
 
     # ---------------------------------------------------------- Tab 2
     with t2:
-        chegadas = sorted(d for d in nos if not adj[d] and radj[d])
-        alvo = st.selectbox("Marco final:", chegadas,
-                            format_func=rotulo, key="t2_sel")
-        caminho = _caminho_mais_longo(radj, alvo)
-        destaque = set(caminho)
-        arestas_dest = set(zip(caminho, caminho[1:]))
-        st.markdown("**Corrente crítica:** " + " → ".join(
-            f"*{nos[c]['atividade'][:26]}*" for c in caminho))
-        st.plotly_chart(
-            _timeline_conectada(nos, edges,
-                                destaque_nos=destaque,
-                                destaque_arestas=arestas_dest),
-            use_container_width=True, config={"displayModeBar": False},
-        )
-
-    # ---------------------------------------------------------- Tab 3
-    with t3:
-        st.markdown("**Timeline de todas as atividades do Master** — "
-                    "cada barra = uma atividade, colorida por status.")
+        st.markdown("**Timeline de todas as atividades do Master.**")
         projs = sorted({a["projeto"] for a in atividades if a["projeto"]})
         f1, f2, f3 = st.columns([2, 2, 1])
         with f1: sel_projs = st.multiselect("Projeto(s)", projs, default=projs)
@@ -449,50 +435,49 @@ def main():
             sel_status = st.multiselect(
                 "Status",
                 ["Concluído", "Em Andamento", "Não Iniciado", "Atrasado", "Reunião"],
-                default=["Em Andamento", "Não Iniciado", "Atrasado"],
-            )
+                default=["Em Andamento", "Não Iniciado", "Atrasado"])
         with f3: so_ent = st.checkbox("Só entregáveis", value=False)
 
         filt = [a for a in atividades
                 if a["projeto"] in sel_projs
-                and _prazo_dt(a["prazo"]) is not None
+                and _prazo_date(a["prazo"]) is not None
                 and str(a["status"]).strip() in sel_status
                 and (not so_ent or a["eh_entregavel"])]
         sem_data = sum(1 for a in atividades
-                       if a["projeto"] in sel_projs and _prazo_dt(a["prazo"]) is None
+                       if a["projeto"] in sel_projs and _prazo_date(a["prazo"]) is None
                        and (not so_ent or a["eh_entregavel"]))
         st.caption(f"{len(filt)} atividades · {sem_data} sem data (ocultas)")
 
         if not filt:
-            st.info("Nada a mostrar com esse filtro.")
+            st.info("Nada a mostrar.")
         else:
             for a in filt:
-                p = _prazo_dt(a["prazo"])
-                a["_start"] = p; a["_end"] = p + dt.timedelta(days=1)
+                p = _prazo_date(a["prazo"])
+                a["_start"] = dt.datetime(p.year, p.month, p.day)
+                a["_end"] = a["_start"] + dt.timedelta(days=1)
                 a["_status_norm"] = str(a["status"]).strip()
             fig = px.timeline(
                 filt, x_start="_start", x_end="_end", y="projeto",
                 color="_status_norm",
-                color_discrete_map={k.capitalize(): v for k, v in STATUS_COR.items()
-                                    if k in ("concluído", "em andamento",
-                                             "não iniciado", "atrasado", "reunião")},
+                color_discrete_map={
+                    "Concluído": "#5DCAA5", "Em Andamento": "#5090D3",
+                    "Não Iniciado": "#6F7E8C", "Atrasado": "#E57373",
+                    "Reunião": "#B39DDB"},
                 hover_data={"atividade": True, "responsaveis": True, "sub": True,
                             "_start": False, "_end": False, "projeto": False,
                             "_status_norm": True},
-                height=max(360, 34 * len(sel_projs) + 120),
-            )
+                height=max(360, 34 * len(sel_projs) + 120))
             ent = [a for a in filt if a["eh_entregavel"]]
             if ent:
                 fig.add_trace(go.Scatter(
-                    x=[_prazo_dt(a["prazo"]) for a in ent],
+                    x=[a["_start"] for a in ent],
                     y=[a["projeto"] for a in ent],
                     mode="markers",
                     marker=dict(symbol="diamond", size=11, color="#FFFFFF",
                                 line=dict(color=PRIMARY, width=1.5)),
                     name="Entregável",
                     hovertext=[a["atividade"][:80] for a in ent],
-                    hoverinfo="text",
-                ))
+                    hoverinfo="text"))
             fig.update_layout(
                 plot_bgcolor=BG, paper_bgcolor=BG,
                 font=dict(color=TEXT, family="Arial", size=11),
@@ -500,29 +485,20 @@ def main():
                 margin=dict(l=8, r=8, t=8, b=8),
                 xaxis=dict(gridcolor=PANEL2, zerolinecolor=PANEL2),
                 yaxis=dict(gridcolor=PANEL2, zerolinecolor=PANEL2,
-                           autorange="reversed"),
-            )
+                           autorange="reversed"))
             st.plotly_chart(fig, use_container_width=True)
 
-    # ---------------------------------------------------------- Tab 4
-    with t4:
-        st.subheader("Só as arestas que cruzam projeto")
+    # ---------------------------------------------------------- Tab 3
+    with t3:
+        st.subheader("Arestas que cruzam projeto")
         inter = [e for e in edges if nos[e["o"]]["projeto"] != nos[e["d"]]["projeto"]]
         st.caption(f"{len(inter)} de {len(edges)} arestas são inter-projeto.")
-        # subset de nós envolvidos
-        ids_inter = {e["o"] for e in inter} | {e["d"] for e in inter}
-        nos_inter = {d: nos[d] for d in ids_inter}
-        st.plotly_chart(
-            _timeline_conectada(nos_inter, inter),
-            use_container_width=True, config={"displayModeBar": False},
-        )
-        with st.expander("Listar arestas inter-projeto", expanded=False):
-            for e in inter:
-                st.markdown(f"- **{nos[e['o']]['atividade'][:44]}** "
-                            f"({nos[e['o']]['projeto']}) → "
-                            f"**{nos[e['d']]['atividade'][:44]}** "
-                            f"({nos[e['d']]['projeto']}) — "
-                            f"*{e['tipo']}/{e['forca']}* · {e['nota']}")
+        for e in inter:
+            st.markdown(f"- **{nos[e['o']]['atividade']}** "
+                        f"*({nos[e['o']]['projeto']})* → "
+                        f"**{nos[e['d']]['atividade']}** "
+                        f"*({nos[e['d']]['projeto']})* — "
+                        f"{e['tipo']}/{e['forca']}")
         st.divider()
         st.subheader("🚩 Flags — pendências")
         if flags:
