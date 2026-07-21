@@ -260,25 +260,18 @@ def _render_card(alvo, analise, nos):
     prazo_alvo = _prazo_date(n_alvo["prazo"])
     prazo_txt = prazo_alvo.strftime("%d/%m/%Y") if prazo_alvo else "sem data"
 
-    # cabeçalho do card
-    header = f"""
-    <div style="border-left: 5px solid {cor}; background: {PANEL};
-                padding: 14px 18px; border-radius: 6px; margin-bottom: 12px;">
-      <div style="display: flex; justify-content: space-between; align-items: baseline;">
-        <div>
-          <span style="color: {cor}; font-weight: 700; font-size: 12px;
-                       letter-spacing: 1px;">
-            {RISCO_ICONE[analise['nivel']]} {RISCO_LABEL[analise['nivel']]}
-          </span>
-          <div style="color: {TEXT}; font-size: 17px; font-weight: 600; margin-top: 4px;">
-            {n_alvo['atividade']}
-          </div>
-          <div style="color: {MUTED}; font-size: 13px; margin-top: 2px;">
-            {n_alvo['projeto']} · entrega {prazo_txt}
-          </div>
-        </div>
-      </div>
-    """
+    # cabeçalho do card (uma linha só p/ não virar bloco de código no Markdown)
+    header = (
+        f'<div style="border-left:5px solid {cor};background:{PANEL};'
+        f'padding:14px 18px;border-radius:6px 6px 0 0;margin-top:12px;">'
+        f'<span style="color:{cor};font-weight:700;font-size:12px;letter-spacing:1px;">'
+        f'{RISCO_ICONE[analise["nivel"]]} {RISCO_LABEL[analise["nivel"]]}</span>'
+        f'<div style="color:{TEXT};font-size:17px;font-weight:600;margin-top:4px;">'
+        f'{n_alvo["atividade"]}</div>'
+        f'<div style="color:{MUTED};font-size:13px;margin-top:2px;">'
+        f'{n_alvo["projeto"]} · entrega {prazo_txt}</div>'
+        f'</div>'
+    )
     st.markdown(header, unsafe_allow_html=True)
 
     # cadeia — cada linha uma etapa
@@ -303,36 +296,46 @@ def _render_card(alvo, analise, nos):
         if n["projeto"] != n_alvo["projeto"]:
             proj_tag = (f'<span style="color: {MUTED}; font-size: 11px; '
                         f'margin-left: 6px;">· {n["projeto"]}</span>')
-        linhas.append(f"""
-          <div style="display: flex; align-items: center; padding: 4px 0;
-                      {'border-top: 1px dashed ' + BORDER + '; margin-top: 4px; padding-top: 8px;'
-                       if did == alvo else ''}">
-            <span style="width: 24px; font-size: 14px;">{icone}</span>
-            <span style="flex: 1; color: {cor_txt}; font-weight: {peso}; font-size: 14px;">
-              {nome}{proj_tag}
-            </span>
-            <span style="color: {MUTED}; font-size: 12px; margin-left: 10px;
-                         font-family: monospace;">{prazo_lin}</span>
-            {gargalo_mark}
-          </div>
-        """)
-    st.markdown(f'<div style="background: {PANEL}; padding: 4px 18px 10px 18px;">'
-                + "".join(linhas) + "</div>",
-                unsafe_allow_html=True)
+        divisor = (f"border-top:1px dashed {BORDER};margin-top:4px;padding-top:8px;"
+                   if did == alvo else "")
+        linha = (
+            f'<div style="display:flex;align-items:center;padding:4px 0;{divisor}">'
+            f'<span style="width:24px;font-size:14px;">{icone}</span>'
+            f'<span style="flex:1;color:{cor_txt};font-weight:{peso};font-size:14px;">'
+            f'{nome}{proj_tag}</span>'
+            f'<span style="color:{MUTED};font-size:12px;margin-left:10px;'
+            f'font-family:monospace;">{prazo_lin}</span>'
+            f'{gargalo_mark}'
+            f'</div>'
+        )
+        linhas.append(linha)
+    st.markdown(
+        f'<div style="background:{PANEL};padding:4px 18px 10px 18px;'
+        f'border-left:5px solid {cor};">'
+        + "".join(linhas) + "</div>",
+        unsafe_allow_html=True,
+    )
 
-    # motivos
+    # motivos (linha única)
     if analise["motivos"]:
         pontos = "".join(f"<li>{m}</li>" for m in analise["motivos"])
-        st.markdown(f"""
-        <div style="background: {PANEL}; padding: 10px 18px 16px 18px;
-                    border-radius: 0 0 6px 6px; margin-bottom: 12px;">
-          <div style="color: {MUTED}; font-size: 12px; text-transform: uppercase;
-                      letter-spacing: 1px; margin-bottom: 4px;">Por quê</div>
-          <ul style="color: {TEXT}; font-size: 13px; margin: 0; padding-left: 18px;
-                     line-height: 1.6;">{pontos}</ul>
-        </div>
-        """, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+        rodape = (
+            f'<div style="background:{PANEL};padding:10px 18px 16px 18px;'
+            f'border-left:5px solid {cor};border-radius:0 0 6px 6px;margin-bottom:12px;">'
+            f'<div style="color:{MUTED};font-size:12px;text-transform:uppercase;'
+            f'letter-spacing:1px;margin-bottom:4px;">Por quê</div>'
+            f'<ul style="color:{TEXT};font-size:13px;margin:0;padding-left:18px;'
+            f'line-height:1.6;">{pontos}</ul>'
+            f'</div>'
+        )
+        st.markdown(rodape, unsafe_allow_html=True)
+    else:
+        st.markdown(
+            f'<div style="height:12px;background:{PANEL};'
+            f'border-left:5px solid {cor};border-radius:0 0 6px 6px;'
+            f'margin-bottom:12px;"></div>',
+            unsafe_allow_html=True,
+        )
 
 
 # ============================================================ UI: main
