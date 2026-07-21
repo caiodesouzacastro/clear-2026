@@ -338,6 +338,110 @@ def _render_card(alvo, analise, nos):
         )
 
 
+# ============================================================ "não pode parar"
+STATUS_CONCLUIDO = {"concluído", "pronto", "enviado para eesp"}
+
+
+def _ranking_nao_pode_parar(atividades, nos, edges):
+    """Faz o cálculo pesado. UI chama e passa direto pra render."""
+    # atividades com prazo válido
+    ativs = []
+    for a in atividades:
+        p = _prazo_date(a["prazo"])
+        if p is None:
+            continue
+        ativs.append({**a, "prazo_d": p,
+                      "key": (a["projeto"], a["atividade"], a["detalhe"])})
+
+    # arestas declaradas (chave natural)
+    edges_decl = set()
+    nos_por_id = {d: n for d, n in nos.items()}
+    for e in edges:
+        no_o, no_d = nos_por_id.get(e["o"]), nos_por_id.get(e["d"])
+        if no_o and no_d:
+            edges_decl.add((
+                (no_o["projeto"], no_o["atividade"], no_o["detalhe"]),
+                (no_d["projeto"], no_d["atividade"], no_d["detalhe"]),
+            ))
+
+    # arestas derivadas: dentro do mesmo projeto, atividade que fecha em D
+    # destrava atividades que abrem em D+próxima_data
+    edges_der = set()
+    por_proj = collections.defaultdict(list)
+    for a in ativs:
+        por_proj[a["projeto"]].append(a)
+    for xs in por_proj.values():
+        xs_sorted = sorted(xs, key=lambda a: a["prazo_d"])
+        # agrupa por data
+        grupos = []
+        atual_data, atual_lista = None, []
+        for a in xs_sorted:
+            if a["prazo_d"] != atual_data:
+                if atual_lista: grupos.append((atual_data, atual_lista))
+                atual_data, atual_lista = a["prazo_d"], []
+            atual_lista.append(a)
+        if atual_lista: grupos.append((atual_data, atual_lista))
+        for i in range(len(grupos) - 1):
+            _, atuais = grupos[i]
+            _, proximos = grupos[i + 1]
+            for o in atuais:
+                for d in proximos:
+                    edges_der.add((o["key"], d["key"]))
+
+    # grafo combinado + tipo de cada aresta
+    adj = collections.defaultdict(set)
+    tipo_aresta = {}
+    for e in edges_decl:
+        adj[e[0]].add(e[1]); tipo_aresta[e] = "declarada"
+    for e in edges_der:
+        if e in edges_decl:
+            tipo_aresta[e] = "declarada"  # declarada ganha
+        else:
+            adj[e[0]].add(e[1]); tipo_aresta[e] = "derivada"
+
+    # entregáveis são os "marcos"
+    marcos = {a["key"] for a in ativs if a["eh_entregavel"]}
+
+    # pra cada atividade: quais marcos ela alcança + se algum caminho é
+    # 100% declarado
+    def downstream(k):
+        """Retorna set de marcos alcançados + set de tipos de aresta usados no caminho."""
+        seen = set(); stack = [k]; hit_marcos = set(); usou_decl = False; usou_der = False
+        while stack:
+            u = stack.pop()
+            for v in adj.get(u, ()):
+                aresta_tipo = tipo_aresta.get((u, v))
+                if aresta_tipo == "declarada": usou_decl = True
+                elif aresta_tipo == "derivada": usou_der = True
+                if v in seen: continue
+                seen.add(v)
+                if v in marcos: hit_marcos.add(v)
+                stack.append(v)
+        return hit_marcos, usou_decl, usou_der
+
+    # ranking
+    ranking = []
+    for a in ativs:
+        if (a["status"] or "").strip().lower() in STATUS_CONCLUIDO:
+            continue
+        marcos_afetados, usou_decl, usou_der = downstream(a["key"])
+        if not marcos_afetados:
+            continue
+        if usou_decl and usou_der:
+            confianca = "mista"
+        elif usou_decl:
+            confianca = "declarada"
+        else:
+            confianca = "derivada"
+        ranking.append({
+            **a, "n_marcos": len(marcos_afetados),
+            "marcos": marcos_afetados, "confianca": confianca,
+        })
+    ranking.sort(key=lambda x: (-x["n_marcos"],
+                                x["prazo_d"] or dt.date(2099, 1, 1)))
+    return ranking
+
+
 # ============================================================ UI: main
 def main():
     st.set_page_config(page_title="CLEAR 2026 · Dependências",
@@ -386,14 +490,119 @@ def main():
     marcos = sorted(d for d in nos if radj[d])
     analises = {d: _analisa_marco(d, radj, nos) for d in marcos}
 
-    t1, t2, t3 = st.tabs([
+    t1, t2, t3, t4 = st.tabs([
+        "🚨 Não pode parar",
         "📋 Cascatas",
         "📅 Todas as atividades",
         "🔀 Inter-projetos & flags",
     ])
 
-    # ---------------------------------------------------------- Tab 1
+    # ---------------------------------------------------------- Tab 1 (Não pode parar)
     with t1:
+        st.caption("🚨 **Use quando quer saber onde ficar de olho essa semana.** "
+                   "Atividades que, se atrasarem 1 dia, arrastam entregáveis à frente.")
+
+        ranking = _ranking_nao_pode_parar(atividades, nos, edges)
+
+        # KPIs no topo
+        vencidas = [r for r in ranking if r["prazo_d"] < HOJE]
+        prox30 = [r for r in ranking if 0 <= (r["prazo_d"] - HOJE).days <= 30]
+        top_impacto = ranking[0]["n_marcos"] if ranking else 0
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Ranqueadas", len(ranking))
+        k2.metric("⏰ Vencidas", len(vencidas),
+                  help="Prazo já passou e ainda não estão concluídas")
+        k3.metric("📅 Nos próximos 30 dias", len(prox30))
+        k4.metric("Pior impacto", f"{top_impacto} marcos")
+
+        # filtros
+        f1, f2, f3 = st.columns([1.5, 1.5, 2])
+        with f1:
+            projs_r = sorted({r["projeto"] for r in ranking})
+            filt_proj = st.multiselect("Projeto", projs_r, default=projs_r,
+                                       key="npp_proj")
+        with f2:
+            filt_conf = st.multiselect("Confiança do cálculo",
+                                       ["declarada", "mista", "derivada"],
+                                       default=["declarada", "mista", "derivada"],
+                                       help=("declarada = cadeia com aresta que "
+                                             "você preencheu no Excel · "
+                                             "derivada = deduzida das datas do "
+                                             "cronograma · mista = ambas"),
+                                       key="npp_conf")
+        with f3:
+            min_impacto = st.slider("Impacto mínimo (marcos afetados)",
+                                    1, max(1, top_impacto), 1,
+                                    key="npp_min")
+
+        # aplica filtros
+        vista = [r for r in ranking
+                 if r["projeto"] in filt_proj
+                 and r["confianca"] in filt_conf
+                 and r["n_marcos"] >= min_impacto]
+
+        st.caption(f"Mostrando **{len(vista)}** de {len(ranking)} atividades.")
+
+        # legenda
+        st.markdown(
+            f'<div style="color:{MUTED};font-size:12px;margin-bottom:8px;">'
+            f'⏰ prazo vencido &nbsp;·&nbsp; '
+            f'🎯 declarada (alta confiança) &nbsp;·&nbsp; '
+            f'📐 derivada (heurística temporal) &nbsp;·&nbsp; '
+            f'🧩 mista'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        # renderiza cada atividade como card compacto
+        for r in vista[:100]:  # cap p/ não explodir tela
+            vencida = r["prazo_d"] < HOJE
+            dias_desde = (HOJE - r["prazo_d"]).days
+            dias_ate = (r["prazo_d"] - HOJE).days
+            selo_prazo = (f'<span style="color:#E57373;font-weight:600;">'
+                          f'⏰ VENCIDA há {dias_desde}d</span>' if vencida
+                          else f'<span style="color:{MUTED};font-size:12px;">'
+                               f'em {dias_ate}d</span>')
+            selo_conf = {
+                "declarada": f'<span style="background:{PANEL2};color:{PRIMARY};'
+                             f'padding:2px 8px;border-radius:10px;font-size:11px;'
+                             f'border:1px solid {PRIMARY};">🎯 declarada</span>',
+                "derivada":  f'<span style="background:{PANEL2};color:{MUTED};'
+                             f'padding:2px 8px;border-radius:10px;font-size:11px;'
+                             f'border:1px solid {BORDER};">📐 derivada</span>',
+                "mista":     f'<span style="background:{PANEL2};color:#5DCAA5;'
+                             f'padding:2px 8px;border-radius:10px;font-size:11px;'
+                             f'border:1px solid #5DCAA5;">🧩 mista</span>',
+            }[r["confianca"]]
+            cor_barra = "#E57373" if vencida else (
+                "#E5A84B" if r["n_marcos"] >= 8 else PRIMARY)
+            st_ativ = (r["status"] or "").strip()
+            icone_st = _icone_status(st_ativ)
+
+            card = (
+                f'<div style="background:{PANEL};border-left:5px solid {cor_barra};'
+                f'padding:12px 16px;margin:6px 0;border-radius:4px;">'
+                f'<div style="display:flex;justify-content:space-between;'
+                f'align-items:center;">'
+                f'<span style="background:{cor_barra};color:{TEXT};padding:4px 10px;'
+                f'border-radius:12px;font-weight:700;font-size:13px;">'
+                f'{r["n_marcos"]} marcos</span>'
+                f'<span style="color:{MUTED};font-size:12px;">{selo_conf}</span>'
+                f'</div>'
+                f'<div style="color:{TEXT};font-size:15px;font-weight:600;'
+                f'margin-top:8px;">{r["atividade"]}</div>'
+                f'<div style="color:{MUTED};font-size:12px;margin-top:4px;">'
+                f'{r["projeto"]} · {icone_st} {st_ativ} · '
+                f'{r["prazo_d"].strftime("%d/%m")} · {selo_prazo}'
+                f'</div>'
+                f'</div>'
+            )
+            st.markdown(card, unsafe_allow_html=True)
+
+        if len(vista) > 100:
+            st.caption(f"… e mais {len(vista)-100}. Use filtros pra reduzir.")
+
+
         # contagem por risco
         conta = collections.Counter(a["nivel"] for a in analises.values())
         col1, col2, col3, col4, col5 = st.columns([1.2, 1.2, 1.2, 1.2, 2.2])
@@ -435,9 +644,9 @@ def main():
         if vistos == 0:
             st.info("Nada bate com esse filtro.")
 
-    # ---------------------------------------------------------- Tab 2
-    with t2:
-        st.markdown("**Timeline de todas as atividades do Master.**")
+    # ---------------------------------------------------------- Tab 3 (Timeline)
+    with t3:
+        st.caption("📅 **Use quando quer o panorama do ano — todas as atividades no tempo.**")
         projs = sorted({a["projeto"] for a in atividades if a["projeto"]})
         f1, f2, f3 = st.columns([2, 2, 1])
         with f1: sel_projs = st.multiselect("Projeto(s)", projs, default=projs)
@@ -498,8 +707,9 @@ def main():
                            autorange="reversed"))
             st.plotly_chart(fig, use_container_width=True)
 
-    # ---------------------------------------------------------- Tab 3
-    with t3:
+    # ---------------------------------------------------------- Tab 4 (Inter+Flags)
+    with t4:
+        st.caption("🔀 **Use quando quer diagnosticar onde estão os gaps de dados/mapeamento.**")
         colL, colR = st.columns(2, gap="large")
 
         # ----- ESQUERDA: panorama (matriz projeto × projeto) -----
