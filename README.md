@@ -5,11 +5,11 @@ Este repositório hospeda **dois apps Streamlit** que leem os mesmos arquivos de
 ## 🔗 Acesse os painéis
 
 **📊 Organização & Alocação**
-**👉 [https://clear-2026-ahhtunccmwdbxx5nmfxpbb.streamlit.app](https://clear-2026-ahhtunccmwdbxx5nmfxpbb.streamlit.app)**
+**👉 [https://clear2026-cronograma.streamlit.app](https://clear2026-cronograma.streamlit.app)**
 Portfólio de projetos, alocação de pesquisadores e próximas entregas do FGV CLEAR em 2026.
 
 **🔗 Cadeia de Dependências**
-**👉 [_cole aqui a URL após o deploy_]**
+**👉 [https://clear2026-dependencias.streamlit.app](https://clear2026-dependencias.streamlit.app)**
 Fio condutor entre atividades: o que trava o quê, dentro de um projeto e entre projetos.
 
 ---
