@@ -602,6 +602,10 @@ def main():
         if len(vista) > 100:
             st.caption(f"… e mais {len(vista)-100}. Use filtros pra reduzir.")
 
+    # ---------------------------------------------------------- Tab 2 (Cascatas)
+    with t2:
+        st.caption("📋 **Use quando pensa num marco específico e quer saber "
+                   "o que pode derrubá-lo.**")
 
         # contagem por risco
         conta = collections.Counter(a["nivel"] for a in analises.values())
