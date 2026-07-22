@@ -82,8 +82,22 @@ def _senha_ok() -> bool:
 
 
 # ============================================================ dados
+def _file_mtime(p: Path) -> float:
+    try: return p.stat().st_mtime
+    except Exception: return 0.0
+
+
 @st.cache_data(show_spinner=False)
+def _carregar_com_chaves(_master_mtime, _deps_mtime):
+    """Cache-key inclui mtime dos arquivos — invalida sozinho quando algo muda."""
+    return _carregar_impl()
+
+
 def carregar():
+    return _carregar_com_chaves(_file_mtime(MASTER), _file_mtime(DEPS))
+
+
+def _carregar_impl():
     wm = openpyxl.load_workbook(MASTER, read_only=True, data_only=True)
     ws = wm["Atividades"]
     hdr = [c.value for c in next(ws.iter_rows(min_row=1, max_row=1))]
