@@ -237,7 +237,7 @@ st.markdown(f"""
 # ============================================================
 # Dados
 # ============================================================
-@st.cache_data(show_spinner="Carregando...")
+@st.cache_data(show_spinner="Carregando...", ttl=600)
 def carregar_dados():
     at = pd.read_excel(MASTER_FILE, sheet_name="Atividades")
     resp = pd.read_excel(MASTER_FILE, sheet_name="Resp_Atividade")
@@ -898,6 +898,12 @@ def aba_alocacao(df_gantt):
     if df_gantt.empty:
         st.info("Sem dados de alocação.")
         return
+
+    c_top1, c_top2 = st.columns([4, 1])
+    with c_top2:
+        if st.button("Recarregar dados", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
 
     m_lo, m_hi = int(df_gantt["mes_de"].min()), int(df_gantt["mes_ate"].max())
 
