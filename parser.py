@@ -70,7 +70,8 @@ CANON = {"bia b":"Bia B","bia s":"Bia S","caio":"Caio","carol":"Carol",
          "fred":"Fred","hisrael":"Hisrael","julia":"Julia","júlia":"Julia","ju":"Julia",
          "junior":"Junior","júnior":"Junior","lorena":"Lorena","luan":"Luan",
          "luigi":"Luigi","luiggi":"Luigi","lycia":"Lycia","michel":"Michel","zinho":"Michel",
-         "samu":"Samu", "samuely":"Samu", "samuely bezerra":"Samu","samy":"Samu","pleno":"Fred","senior":"Hisrael","sênior":"Hisrael",
+         "samu":"Samu", "samuely":"Samu", "samuely bezerra":"Samu","samy":"Samu","pleno":"Fred",
+         "frederik":"Fred","frederik de jonghe":"Fred","senior":"Hisrael","sênior":"Hisrael",
          "beatriz b":"Bia B","bai b":"Bia B","caraol":"Carol",
          "bias":"Bia S","biab":"Bia B","bia. s":"Bia S","bia. b":"Bia B"}
 # externos reais que devem ser preservados como responsáveis
@@ -87,8 +88,19 @@ EXTERNAL_KEEP = {"marcio":"Marcio","lara":"Lara","lia":"Lia","amanda":"Amanda","
                  "equipe implementadora":"Equipe Implementadora","cmf-bid":"CMF-BID",
                  "amanda":"Amanda","alei":"Alei","auditores":"Auditores","hugo":"Hugo",
                  "comunicação fgv":"Comunicação FGV","comunicacao fgv":"Comunicação FGV",
-                 "isabella":"Isabella","ana":"Ana"}
-_NOTE_DROP = {"dummy","confirmar","apoio","equipe","provavelmente nós","bia"}
+                 "isabella":"Isabella","ana":"Ana",
+                 # --- ciclo 12/10/2026: externos reais que estavam sendo descartados ---
+                 "thania":"Thania",                  # consultora do Hands-on (PRiME)
+                 "fgv clear lab":"CLEAR LAB",        # mesma entidade de "CLEAR LAB"
+                 "thais":"Thais","fabiana":"Fabiana","fábio":"Fábio","fabio":"Fábio",
+                 "clóvis":"Clóvis","clovis":"Clóvis",   # equipe da Av. Executiva (IU)
+                 "khalid":"Khalid","cenci":"Cenci",     # revisores externos do PRiME
+                 "gabriel":"Gabriel W",              # "Gabriel W, Cenci e Thania" no mesmo cronograma
+                 "amaninha":"Amanda"}
+_NOTE_DROP = {"dummy","confirmar","apoio","equipe","provavelmente nós","bia",
+              # placeholders de papel, nao pessoas (ciclo 12/10/2026)
+              "a definir","tbd","mentores","consultant","junior person","participantes",
+              "hands-on trainer","gestores","—","-"}
 
 
 def split_responsaveis(raw):
@@ -110,6 +122,11 @@ def split_responsaveis(raw):
         low = t.lower()
         if low in _NOTE_DROP or low in DISCARD:
             continue
+        # "Fábio: dados secundários" -> o nome antes dos dois-pontos e o responsavel
+        if ":" in t:
+            pref = t.split(":", 1)[0].strip()
+            if pref.lower() in CANON or pref.lower() in EXTERNAL_KEEP:
+                t, low = pref, pref.lower()
         if ":" in t or any(ch.isdigit() for ch in t) or len(t) > 26:
             continue
         if low in CANON:

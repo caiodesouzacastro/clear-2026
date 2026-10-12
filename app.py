@@ -92,6 +92,15 @@ CORES_STATUS = {
 # Cor de destaque para entregas de Comunicação no calendário
 COR_COMUNICACAO = "#E5A84B"
 
+# Status próprios da aba Eventos (vocabulário diferente das Atividades)
+CORES_EVENTO = {
+    "Confirmado": "#5DCAA5",
+    "A confirmar": "#E5A84B",
+    "Em negociação": "#C77DD6",
+    "Realizado": "#6F7E8C",
+    "Cancelado": "#E57373",
+}
+
 MESES_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
             "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
 MESES_PT_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -252,7 +261,21 @@ def carregar_dados():
     at["eh_entregavel"] = at["eh_entregavel"].fillna(False).astype(bool)
     resp["eh_entregavel"] = resp["eh_entregavel"].fillna(False).astype(bool)
     at["responsaveis"] = at["responsaveis"].fillna("")
-    return at, resp, aloc, pes, gantt
+
+    # abas novas (12/10/2026): master anterior nao as tem, entao faltar nao quebra
+    def _opcional(aba, col_data):
+        try:
+            d = pd.read_excel(MASTER_FILE, sheet_name=aba)
+        except Exception:
+            return pd.DataFrame()
+        for c in col_data:
+            if c in d.columns:
+                d[c] = pd.to_datetime(d[c], errors="coerce")
+        return d
+
+    eventos = _opcional("Eventos", ["data", "data_fim"])
+    monitorias = _opcional("Monitorias", ["data"])
+    return at, resp, aloc, pes, gantt, eventos, monitorias
 
 
 # ============================================================
@@ -1197,11 +1220,227 @@ def aba_ferias():
 
 
 # ============================================================
+# ABA — Eventos (aba Eventos do cronograma de Comunicação)
+# ============================================================
+def aba_eventos(df_ev):
+    st.subheader("Eventos")
+    st.caption("Eventos do centro — webinars, lançamentos, mesas e encontros. "
+               "Vem da aba Eventos do cronograma de Comunicação, independente "
+               "do filtro lateral.")
+
+    if df_ev is None or df_ev.empty:
+        st.info("Nenhum evento registrado. Preencha a aba Eventos do "
+                "Cronograma_Comunicação_2026.xlsx e regenere o master.")
+        return
+
+    ev = df_ev.copy()
+    com_data = ev[ev["data"].notna()].sort_values("data")
+    sem_data = ev[ev["data"].isna()]
+    hoje = pd.Timestamp(date.today())
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Eventos", len(ev))
+    c2.metric("Confirmados", int((ev["status"] == "Confirmado").sum()))
+    c3.metric("A confirmar", int(ev["status"].isin(["A confirmar", "Em negociação"]).sum()))
+    c4.metric("Já realizados", int((ev["status"] == "Realizado").sum()))
+
+    # legenda de status
+    chips = "".join(
+        f'<span style="display:inline-block;margin-right:12px;font-size:0.72rem;'
+        f'color:{TEXTO_DIM};"><span style="display:inline-block;width:10px;'
+        f'height:10px;background:{cor};border-radius:2px;margin:0 4px -1px 0;">'
+        f'</span>{_esc(nome)}</span>'
+        for nome, cor in CORES_EVENTO.items())
+    st.markdown(
+        f'<div style="background:{BG_CARD}; padding:8px 12px; border-radius:4px; '
+        f'margin:4px 0 14px 0;">{chips}</div>', unsafe_allow_html=True)
+
+    proximos = com_data[com_data["data"] >= hoje]
+    if not proximos.empty:
+        p = proximos.iloc[0]
+        dias = (p["data"].normalize() - hoje.normalize()).days
+        quando = "hoje" if dias == 0 else ("amanhã" if dias == 1 else f"em {dias} dias")
+        st.markdown(
+            f'<div style="border-left:4px solid {AZUL_CLARO}; background:{BG_CARD}; '
+            f'padding:10px 14px; border-radius:4px; margin-bottom:14px;">'
+            f'<span style="font-size:0.7rem; color:{TEXTO_DIM2}; '
+            f'text-transform:uppercase; letter-spacing:0.06em;">Próximo evento · '
+            f'{quando}</span><br>'
+            f'<span style="font-size:0.95rem; color:{TEXTO}; font-weight:600;">'
+            f'{_esc(p["evento"])}</span>'
+            f'<span style="font-size:0.78rem; color:{TEXTO_DIM};"> · '
+            f'{p["data"].strftime("%d/%m/%Y")}</span></div>',
+            unsafe_allow_html=True)
+
+    st.markdown("---")
+    for mes in sorted(com_data["data"].dt.month.unique()):
+        bloco = com_data[com_data["data"].dt.month == mes]
+        st.markdown(
+            f'<div style="font-size:0.8rem; font-weight:600; color:{AZUL_CLARO}; '
+            f'margin:14px 0 6px 0;">{MESES_PT_FULL[int(mes) - 1]} 2026 · '
+            f'{len(bloco)} evento(s)</div>', unsafe_allow_html=True)
+        linhas = ""
+        for _, r in bloco.iterrows():
+            cor = CORES_EVENTO.get(r["status"], TEXTO_DIM)
+            periodo = r["data"].strftime("%d/%m")
+            if pd.notna(r.get("data_fim")):
+                periodo += f'–{r["data_fim"].strftime("%d/%m")}'
+            meta = " · ".join(
+                _esc(v) for v in (r.get("tipo"), r.get("formato"), r.get("local"))
+                if pd.notna(v) and str(v).strip())
+            resp = (_esc(r["responsaveis"]) if pd.notna(r.get("responsaveis"))
+                    and str(r["responsaveis"]).strip() else "—")
+            proj = (f'<span style="font-size:0.68rem; color:{TEXTO_DIM2};"> · '
+                    f'{_esc(r["projeto"])}</span>'
+                    if pd.notna(r.get("projeto")) and str(r["projeto"]).strip() else "")
+            linhas += (
+                f'<div style="display:flex; align-items:flex-start; gap:10px; '
+                f'background:{BG_CARD}; border-left:3px solid {cor}; '
+                f'padding:7px 10px; margin-bottom:4px; border-radius:3px;">'
+                f'<div style="min-width:62px; font-size:0.72rem; color:{TEXTO_DIM2}; '
+                f'font-weight:600;">{periodo}</div>'
+                f'<div style="flex:1; font-size:0.82rem; color:{TEXTO};">'
+                f'{_esc(r["evento"])}{proj}'
+                f'<div style="font-size:0.7rem; color:{TEXTO_DIM2}; margin-top:2px;">'
+                f'{meta}</div></div>'
+                f'<div style="font-size:0.72rem; color:{TEXTO_DIM}; min-width:95px; '
+                f'text-align:right;">{resp}</div>'
+                f'<div style="font-size:0.68rem; color:{cor}; min-width:86px; '
+                f'text-align:right;">{_esc(r["status"])}</div></div>')
+        st.markdown(linhas, unsafe_allow_html=True)
+
+    if not sem_data.empty:
+        st.markdown("---")
+        with st.expander(f"Eventos sem data definida ({len(sem_data)})"):
+            for _, r in sem_data.iterrows():
+                obs = (f' — {r["obs"]}' if pd.notna(r.get("obs"))
+                       and str(r["obs"]).strip() else "")
+                st.markdown(f'- **{r["evento"]}** · {r["status"]}{obs}')
+
+    with st.expander("Ver tabela completa"):
+        cols = [c for c in ["evento", "tipo", "projeto", "data", "formato", "local",
+                            "publico_alvo", "responsaveis", "status",
+                            "pecas_divulgacao", "obs"] if c in ev.columns]
+        st.dataframe(ev[cols], use_container_width=True, hide_index=True)
+
+
+# ============================================================
+# ABA — Monitorias (Formação CPP 1.2: sessões por mentor e grupo)
+# ============================================================
+def aba_monitorias(df_mon):
+    st.subheader("Monitorias — Formação CPP 1.2")
+    st.caption("Sessões de mentoria por rodada, mentor e grupo. Vem da aba "
+               "Monitorias do Cronograma_IU_ CPP1.2.xlsx.")
+
+    if df_mon is None or df_mon.empty:
+        st.info("Nenhuma monitoria registrada no master.")
+        return
+
+    mon = df_mon.copy()
+    mon["mentor"] = mon["mentor"].fillna("—")
+    hoje = pd.Timestamp(date.today())
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Sessões", len(mon))
+    c2.metric("Mentores", int(mon.loc[mon["mentor"] != "—", "mentor"].nunique()))
+    c3.metric("Grupos", int(mon["uf_grupo"].nunique()))
+    c4.metric("Concluídas", int((mon["status"] == "Concluído").sum()))
+
+    alerta = mon[mon["obs"].notna() & (mon["obs"].astype(str).str.strip() != "")]
+    if not alerta.empty:
+        itens = "".join(
+            f'<div style="font-size:0.76rem; color:{TEXTO}; margin-top:3px;">'
+            f'{r["data"].strftime("%d/%m") if pd.notna(r["data"]) else "—"} · '
+            f'{_esc(r["uf_grupo"])} · {_esc(r["mentor"])} — '
+            f'<span style="color:{COR_COMUNICACAO};">{_esc(r["obs"])}</span></div>'
+            for _, r in alerta.iterrows())
+        st.markdown(
+            f'<div style="border-left:4px solid {COR_COMUNICACAO}; '
+            f'background:{BG_CARD}; padding:10px 14px; border-radius:4px; '
+            f'margin:4px 0 14px 0;"><span style="font-size:0.7rem; '
+            f'color:{TEXTO_DIM2}; text-transform:uppercase; letter-spacing:0.06em;">'
+            f'Sessões com observação ({len(alerta)})</span>{itens}</div>',
+            unsafe_allow_html=True)
+
+    # carga por mentor x rodada
+    st.markdown("---")
+    st.markdown("**Sessões por mentor × rodada**")
+    rodadas = sorted(mon["monitoria"].dropna().unique(),
+                     key=lambda x: (len(str(x)), str(x)))
+    mentores = sorted(m for m in mon["mentor"].unique() if m != "—")
+    tabela = mon.pivot_table(index="mentor", columns="monitoria", values="id_monitoria",
+                             aggfunc="count").reindex(index=mentores, columns=rodadas)
+    cab = "".join(f'<th style="padding:5px 8px; font-size:0.7rem; color:{TEXTO_DIM2}; '
+                  f'font-weight:600; text-align:center;">{_esc(r)}</th>' for r in rodadas)
+    corpo = ""
+    for m in mentores:
+        cels = ""
+        for r in rodadas:
+            v = tabela.loc[m, r]
+            v = 0 if pd.isna(v) else int(v)
+            intensidade = 0.0 if v == 0 else min(0.18 + 0.16 * v, 0.85)
+            cor_txt = TEXTO if v else TEXTO_DIM2
+            cels += (f'<td style="padding:5px 8px; text-align:center; '
+                     f'font-size:0.76rem; color:{cor_txt}; '
+                     f'background:rgba(80,144,211,{intensidade:.2f});">'
+                     f'{v if v else "·"}</td>')
+        corpo += (f'<tr><td style="padding:5px 10px; font-size:0.78rem; '
+                  f'color:{TEXTO}; white-space:nowrap;">{_esc(m)}</td>{cels}'
+                  f'<td style="padding:5px 10px; font-size:0.76rem; '
+                  f'color:{TEXTO_DIM}; font-weight:600;">'
+                  f'{int(tabela.loc[m].fillna(0).sum())}</td></tr>')
+    st.markdown(
+        f'<table style="border-collapse:collapse; width:100%; background:{BG_CARD}; '
+        f'border-radius:4px; overflow:hidden;"><tr>'
+        f'<th style="padding:5px 10px; font-size:0.7rem; color:{TEXTO_DIM2}; '
+        f'text-align:left;">Mentor</th>{cab}'
+        f'<th style="padding:5px 10px; font-size:0.7rem; color:{TEXTO_DIM2};">Tot</th>'
+        f'</tr>{corpo}</table>', unsafe_allow_html=True)
+
+    # agenda por rodada
+    st.markdown("---")
+    for rod in rodadas:
+        bloco = mon[mon["monitoria"] == rod].sort_values(["data", "horario"])
+        datas = bloco["data"].dropna()
+        janela = ""
+        if not datas.empty:
+            janela = (f' · {datas.min().strftime("%d/%m")}'
+                      f'–{datas.max().strftime("%d/%m")}')
+        pend = int((bloco["status"] != "Concluído").sum())
+        with st.expander(f"{rod}{janela} · {len(bloco)} sessões"
+                         f"{f' · {pend} em aberto' if pend else ''}",
+                         expanded=bool(not datas.empty and datas.min() >= hoje
+                                       and datas.min() <= hoje + pd.Timedelta(days=14))):
+            linhas = ""
+            for _, r in bloco.iterrows():
+                cor = CORES_STATUS.get(r["status"], TEXTO_DIM)
+                dia = r["data"].strftime("%a %d/%m") if pd.notna(r["data"]) else "—"
+                obs = (f'<span style="color:{COR_COMUNICACAO};"> · {_esc(r["obs"])}</span>'
+                       if pd.notna(r["obs"]) and str(r["obs"]).strip() else "")
+                linhas += (
+                    f'<div style="display:flex; align-items:center; gap:10px; '
+                    f'background:{BG_CARD}; border-left:3px solid {cor}; '
+                    f'padding:5px 10px; margin-bottom:3px; border-radius:3px;">'
+                    f'<div style="min-width:78px; font-size:0.72rem; '
+                    f'color:{TEXTO_DIM2};">{dia}</div>'
+                    f'<div style="min-width:62px; font-size:0.72rem; '
+                    f'color:{TEXTO_DIM};">{_esc(r["horario"] or "—")}</div>'
+                    f'<div style="flex:1; font-size:0.8rem; color:{TEXTO};">'
+                    f'{_esc(r["uf_grupo"])}{obs}</div>'
+                    f'<div style="min-width:70px; font-size:0.75rem; '
+                    f'color:{TEXTO_DIM};">{_esc(r["mentor"])}</div>'
+                    f'<div style="min-width:86px; text-align:right; '
+                    f'font-size:0.68rem; color:{cor};">{_esc(r["status"])}</div></div>')
+            st.markdown(linhas, unsafe_allow_html=True)
+
+
+# ============================================================
 # Main
 # ============================================================
 def main():
     try:
-        df_at, df_resp, df_aloc, df_pessoas, df_gantt = carregar_dados()
+        (df_at, df_resp, df_aloc, df_pessoas, df_gantt,
+         df_eventos, df_monitorias) = carregar_dados()
     except FileNotFoundError:
         st.error("Planilha mestra não encontrada.")
         st.stop()
@@ -1212,9 +1451,10 @@ def main():
     if escopo == "Só entregáveis críticos":
         df_resp_f = df_resp_f[df_resp_f["eh_entregavel"]]
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
-        ["Visão Geral", "Calendário", "Comunicação", "Alocação",
-         "Equipe", "Pesquisador", "Farol", "Férias"])
+    (tab1, tab2, tab3, tab4, tab5, tab6,
+     tab7, tab8, tab9, tab10) = st.tabs(
+        ["Visão Geral", "Calendário", "Comunicação", "Eventos", "Alocação",
+         "Equipe", "Pesquisador", "Farol", "Férias", "Monitorias"])
     with tab1:
         aba_gantt(df_at_f)
     with tab2:
@@ -1222,15 +1462,19 @@ def main():
     with tab3:
         aba_comunicacao(df_at)
     with tab4:
-        aba_alocacao(df_gantt)
+        aba_eventos(df_eventos)
     with tab5:
-        aba_equipe(df_aloc)
+        aba_alocacao(df_gantt)
     with tab6:
-        aba_pesquisador(df_resp_f, df_aloc, df_pessoas)
+        aba_equipe(df_aloc)
     with tab7:
-        aba_farol(df_aloc)
+        aba_pesquisador(df_resp_f, df_aloc, df_pessoas)
     with tab8:
+        aba_farol(df_aloc)
+    with tab9:
         aba_ferias()
+    with tab10:
+        aba_monitorias(df_monitorias)
 
 
 if __name__ == "__main__":
