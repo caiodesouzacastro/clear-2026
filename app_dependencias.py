@@ -24,20 +24,20 @@ BASE = Path(__file__).parent
 MASTER = BASE / "CLEAR_Master_2026.xlsx"
 DEPS = BASE / "Dependencias_CLEAR_2026.xlsx"
 
-# ---- paleta base do repo (config.toml)
-BG        = "#0A1929"
-PANEL     = "#132F4C"
-PANEL2    = "#1E3A5F"
-PRIMARY   = "#5090D3"
+# ---- paleta base (cores da identidade FGV CLEAR: navy2/navy, realce azul)
+BG        = "#012030"
+PANEL     = "#01354A"
+PANEL2    = "#0A4A63"
+PRIMARY   = "#08B0EE"
 TEXT      = "#FFFFFF"
 MUTED     = "#B2BAC2"
-BORDER    = "#26456B"
+BORDER    = "#1D5F7A"
 
 # ---- cores de risco (contraste real p/ gritar o gargalo)
 RISCO_COR = {
     "critico":  "#E57373",   # vermelho
     "atencao":  "#E5A84B",   # âmbar
-    "ok":       "#5DCAA5",   # verde-água
+    "ok":       "#98C43B",   # verde
     "info":     "#6F7E8C",   # cinza (sem dep upstream)
 }
 RISCO_ICONE = {"critico": "🔴", "atencao": "🟡", "ok": "🟢", "info": "⚪"}
@@ -53,8 +53,8 @@ STATUS_ICONE = {
 }
 
 STATUS_COR = {
-    "concluído": "#5DCAA5", "pronto": "#5DCAA5", "enviado para eesp": "#5DCAA5",
-    "em andamento": "#5090D3",
+    "concluído": "#98C43B", "pronto": "#98C43B", "enviado para eesp": "#98C43B",
+    "em andamento": "#08B0EE",
     "não iniciado": "#6F7E8C",
     "atrasado": "#E57373",
     "reunião": "#B39DDB",
@@ -301,7 +301,8 @@ def _render_card(alvo, analise, nos):
     header = (
         f'<div style="border-left:5px solid {cor};background:{PANEL};'
         f'padding:14px 18px;border-radius:6px 6px 0 0;margin-top:12px;">'
-        f'<span style="color:{cor};font-weight:700;font-size:12px;letter-spacing:1px;">'
+        f'<span style="color:{cor};font-weight:700;font-size:13px;letter-spacing:0;'
+        f'font-family:Arial,Helvetica,sans-serif;">'
         f'{RISCO_ICONE[analise["nivel"]]} {RISCO_LABEL[analise["nivel"]]}</span>'
         f'<div style="color:{TEXT};font-size:17px;font-weight:600;margin-top:4px;">'
         f'{n_alvo["atividade"]}</div>'
@@ -353,7 +354,7 @@ def _render_card(alvo, analise, nos):
             f'<span style="flex:1;color:{cor_txt};font-weight:{peso};font-size:14px;">'
             f'{nome}{proj_tag}</span>'
             f'<span style="color:{MUTED};font-size:12px;margin-left:10px;'
-            f'font-family:monospace;">{prazo_lin}</span>'
+            f'font-family:Arial,Helvetica,sans-serif;font-variant-numeric:tabular-nums;">{prazo_lin}</span>'
             f'{gargalo_mark}'
             f'</div>'
             f'</div>'
@@ -372,8 +373,8 @@ def _render_card(alvo, analise, nos):
         rodape = (
             f'<div style="background:{PANEL};padding:10px 18px 16px 18px;'
             f'border-left:5px solid {cor};border-radius:0 0 6px 6px;margin-bottom:12px;">'
-            f'<div style="color:{MUTED};font-size:12px;text-transform:uppercase;'
-            f'letter-spacing:1px;margin-bottom:4px;">Por quê</div>'
+            f'<div style="color:{MUTED};font-size:13px;font-weight:700;text-transform:none;'
+            f'letter-spacing:0;margin-bottom:4px;">Por quê</div>'
             f'<ul style="color:{TEXT};font-size:13px;margin:0;padding-left:18px;'
             f'line-height:1.6;">{pontos}</ul>'
             f'</div>'
@@ -498,6 +499,39 @@ def main():
                        page_icon="🔗", layout="wide",
                        initial_sidebar_state="collapsed")
 
+    # ============================================================
+    # Identidade visual FGV CLEAR / Policy Lab: fontes
+    # ============================================================
+    st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+html, body, .stApp, [data-testid="stSidebar"], .stMarkdown, .stMarkdown p, .stMarkdown li,
+[data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li, [data-testid="stMarkdownContainer"] div,
+[data-testid="stCaptionContainer"], [data-testid="stWidgetLabel"], label, input, textarea,
+button, [data-baseweb="select"], [data-baseweb="tag"], [data-baseweb="tab"],
+[data-testid="stDataFrame"], [data-testid="stTable"], table, th, td,
+[data-testid="stMetricLabel"], [data-testid="stMetricDelta"], [data-testid="stExpander"] summary,
+[data-testid="stAlert"], [data-testid="stTooltipContent"] {
+    font-family: Arial, Helvetica, sans-serif !important;
+}
+h1, h2, h3, h4, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4,
+[data-testid="stHeading"] h1, [data-testid="stHeading"] h2, [data-testid="stHeading"] h3,
+[data-testid="stMetricValue"], [data-testid="stMetricValue"] div, [data-testid="stMetricValue"] p {
+    font-family: 'Gotham', 'Montserrat', Arial, sans-serif !important;
+    font-weight: 700 !important;
+    font-style: normal !important;
+    letter-spacing: -0.01em;
+    text-transform: none;
+}
+[data-testid="stMetricValue"] { font-variant-numeric: tabular-nums; }
+[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] p {
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+}
+</style>
+    """, unsafe_allow_html=True)
+
     st.markdown(f"""
     <style>
       .block-container {{ padding-top: 1.2rem; padding-bottom: 1rem; max-width: 1200px; }}
@@ -620,9 +654,9 @@ def main():
                 "derivada":  f'<span style="background:{PANEL2};color:{MUTED};'
                              f'padding:2px 8px;border-radius:10px;font-size:11px;'
                              f'border:1px solid {BORDER};">📐 derivada</span>',
-                "mista":     f'<span style="background:{PANEL2};color:#5DCAA5;'
+                "mista":     f'<span style="background:{PANEL2};color:#98C43B;'
                              f'padding:2px 8px;border-radius:10px;font-size:11px;'
-                             f'border:1px solid #5DCAA5;">🧩 mista</span>',
+                             f'border:1px solid #98C43B;">🧩 mista</span>',
             }[r["confianca"]]
             cor_barra = "#E57373" if vencida else (
                 "#E5A84B" if r["n_marcos"] >= 8 else PRIMARY)
@@ -733,7 +767,7 @@ def main():
                 filt, x_start="_start", x_end="_end", y="projeto",
                 color="Status",
                 color_discrete_map={
-                    "Concluído": "#5DCAA5", "Em Andamento": "#5090D3",
+                    "Concluído": "#98C43B", "Em Andamento": "#08B0EE",
                     "Não Iniciado": "#6F7E8C", "Atrasado": "#E57373",
                     "Reunião": "#B39DDB"},
                 hover_data={"atividade": True, "responsaveis": True, "sub": True,
@@ -753,7 +787,7 @@ def main():
                     hoverinfo="text"))
             fig.update_layout(
                 plot_bgcolor=BG, paper_bgcolor=BG,
-                font=dict(color=TEXT, family="Arial", size=11),
+                font=dict(color=TEXT, family="Arial, Helvetica, sans-serif", size=11),
                 legend=dict(bgcolor=PANEL, bordercolor=BORDER, borderwidth=1),
                 margin=dict(l=8, r=8, t=8, b=8),
                 xaxis=dict(gridcolor=PANEL2, zerolinecolor=PANEL2),
@@ -791,7 +825,7 @@ def main():
                 head_stl = cel_stl + f"background:{PANEL2};color:{MUTED};font-weight:600;"
                 linhas_html = [
                     f'<table style="border-collapse:collapse;width:100%;'
-                    f'font-family:Arial;">',
+                    f'font-family:Arial,Helvetica,sans-serif;">',
                     "<tr>",
                     f'<td style="{head_stl}"></td>',
                 ]

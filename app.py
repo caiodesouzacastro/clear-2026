@@ -23,6 +23,40 @@ st.set_page_config(page_title="CLEAR 2026", page_icon="📊", layout="wide",
 
 
 # ============================================================
+# Identidade visual FGV CLEAR / Policy Lab: fontes
+# ============================================================
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+html, body, .stApp, [data-testid="stSidebar"], .stMarkdown, .stMarkdown p, .stMarkdown li,
+[data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li, [data-testid="stMarkdownContainer"] div,
+[data-testid="stCaptionContainer"], [data-testid="stWidgetLabel"], label, input, textarea,
+button, [data-baseweb="select"], [data-baseweb="tag"], [data-baseweb="tab"],
+[data-testid="stDataFrame"], [data-testid="stTable"], table, th, td,
+[data-testid="stMetricLabel"], [data-testid="stMetricDelta"], [data-testid="stExpander"] summary,
+[data-testid="stAlert"], [data-testid="stTooltipContent"] {
+    font-family: Arial, Helvetica, sans-serif !important;
+}
+h1, h2, h3, h4, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4,
+[data-testid="stHeading"] h1, [data-testid="stHeading"] h2, [data-testid="stHeading"] h3,
+[data-testid="stMetricValue"], [data-testid="stMetricValue"] div, [data-testid="stMetricValue"] p {
+    font-family: 'Gotham', 'Montserrat', Arial, sans-serif !important;
+    font-weight: 700 !important;
+    font-style: normal !important;
+    letter-spacing: -0.01em;
+    text-transform: none;
+}
+[data-testid="stMetricValue"] { font-variant-numeric: tabular-nums; }
+[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] p {
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# ============================================================
 # Autenticação (senha simples via st.secrets)
 # ============================================================
 def _check_password():
@@ -69,23 +103,23 @@ EQUIPE = ["Bia B", "Bia S", "Caio", "Carol", "Cecilia", "Fabrícia", "Fred",
           "Hisrael", "Julia", "Junior", "Lorena", "Luan", "Luigi", "Lycia",
           "Michel", "Samu"]
 
-# Paleta Bloomberg dark
-BG = "#0A1929"
-BG_CARD = "#132F4C"
-BG_HOVER = "#1E3A5F"
+# Paleta escura com as cores da identidade FGV CLEAR (navy2/navy, realce azul)
+BG = "#012030"
+BG_CARD = "#01354A"
+BG_HOVER = "#0A4A63"
 TEXTO = "#FFFFFF"
 TEXTO_DIM = "#B2BAC2"
 TEXTO_DIM2 = "#6F7E8C"
-BORDA = "#1E3A5F"
-AZUL = "#5090D3"
-AZUL_CLARO = "#7BB3F0"
-AZUL_ESCURO = "#26456B"
+BORDA = "#0A4A63"
+AZUL = "#08B0EE"
+AZUL_CLARO = "#7FD4F6"
+AZUL_ESCURO = "#1D5F7A"
 
 CORES_STATUS = {
     "Concluído": "#6F7E8C",
-    "Em Andamento": "#5090D3",
+    "Em Andamento": "#08B0EE",
     "Não Iniciado": "#3A5169",
-    "Atrasado": "#7BB3F0",
+    "Atrasado": "#7FD4F6",
     "Reunião": "#4A6FA5",
 }
 
@@ -107,8 +141,8 @@ MESES_PT_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
                  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 
 # Paleta categórica (legível sobre o navy) — usada nos Gantts de alocação
-PALETA = ["#5090D3", "#5DCAA5", "#E5A84B", "#C77DD6", "#E57373", "#7FB8E6",
-          "#9CCC65", "#F0A868", "#64B6AC", "#B39DDB", "#4FC3F7", "#FF8A65",
+PALETA = ["#08B0EE", "#98C43B", "#E5A84B", "#C77DD6", "#E57373", "#7FB8E6",
+          "#5DCAA5", "#F0A868", "#64B6AC", "#B39DDB", "#7FA7B8", "#FF8A65",
           "#A1C181", "#E8A0BF", "#76C7C0", "#D4A55E"]
 
 
@@ -138,13 +172,13 @@ def render_gantt(groups, color_map, m_min, m_max, eixo_label):
     s = [f'<svg viewBox="0 0 {total_w} {total_h}" width="{total_w}" height="{total_h}" '
          f'xmlns="http://www.w3.org/2000/svg" '
          f'style="max-width:100%;height:auto;display:block;margin:0 auto;'
-         f'font-family:-apple-system,Segoe UI,sans-serif;">']
+         f'font-family:Arial,Helvetica,sans-serif;">']
     s.append(f'<rect width="{total_w}" height="{total_h}" fill="{BG_CARD}" rx="6"/>')
     for i, m in enumerate(months):
         x = xm(m)
         if i % 2 == 0:
             s.append(f'<rect x="{x}" y="{HDR}" width="{COL_W}" height="{total_h - HDR - PAD}" '
-                     f'fill="rgba(255,255,255,0.025)"/>')
+                     f'fill="rgba(8,176,238,0.04)"/>')
         s.append(f'<text x="{x + COL_W / 2}" y="24" text-anchor="middle" font-size="11" '
                  f'fill="{TEXTO_DIM2}">{MESES_PT[m - 1]}</text>')
         s.append(f'<line x1="{x}" y1="30" x2="{x}" y2="{total_h - PAD}" '
@@ -160,7 +194,7 @@ def render_gantt(groups, color_map, m_min, m_max, eixo_label):
         # faixa de fundo alternada (separa visualmente cada pessoa/projeto)
         if gi % 2 == 1:
             s.append(f'<rect x="{PAD}" y="{y}" width="{total_w - 2 * PAD}" height="{rh}" '
-                     f'fill="rgba(255,255,255,0.035)"/>')
+                     f'fill="rgba(8,176,238,0.05)"/>')
         # divisor superior do grupo (mais forte)
         s.append(f'<line x1="{PAD}" y1="{y}" x2="{total_w - PAD}" y2="{y}" '
                  f'stroke="{AZUL_ESCURO}" stroke-width="1"/>')
@@ -196,11 +230,11 @@ st.markdown(f"""
     .block-container {{ padding-top: 2rem; }}
     [data-testid="stSidebar"] {{ background-color: {BG_CARD}; }}
     [data-testid="stSidebar"] > div {{ background-color: {BG_CARD}; }}
-    h1, h2, h3, h4, h5, h6 {{ color: {TEXTO} !important; font-weight: 600; }}
+    h1, h2, h3, h4, h5, h6 {{ color: {TEXTO} !important; font-weight: 700; }}
     p, span, label {{ color: {TEXTO}; }}
     [data-testid="stMetricValue"] {{ color: {TEXTO} !important; font-weight: 700; font-size: 2rem; }}
-    [data-testid="stMetricLabel"] {{ color: {TEXTO_DIM} !important; font-size: 0.8rem;
-        text-transform: uppercase; letter-spacing: 0.05em; }}
+    [data-testid="stMetricLabel"] {{ color: {TEXTO_DIM} !important; font-size: 0.85rem;
+        text-transform: none; letter-spacing: 0; }}
     .stTabs [data-baseweb="tab-list"] {{ gap: 4px; background-color: {BG};
         border-bottom: 1px solid {BORDA}; }}
     .stTabs [data-baseweb="tab"] {{ background-color: transparent; color: {TEXTO_DIM};
@@ -542,12 +576,12 @@ def aba_equipe(df_aloc):
         if n == 0:
             return BG_CARD
         if n <= 3:
-            return "#26456B"
+            return "#1D5F7A"
         if n <= 5:
-            return "#3D6A9E"
+            return "#1488B8"
         if n <= 7:
-            return "#5090D3"
-        return "#7BB3F0"
+            return "#08B0EE"
+        return "#7FD4F6"
 
     # cabeçalho
     header = f'<div style="width:90px; flex-shrink:0;"></div>'
@@ -623,7 +657,7 @@ def aba_pesquisador(df_resp, df_aloc, df_pessoas):
         fig.update_layout(
             height=300, margin=dict(t=20, b=20, l=10, r=10),
             paper_bgcolor=BG, plot_bgcolor=BG,
-            font=dict(color=TEXTO_DIM), showlegend=False,
+            font=dict(color=TEXTO_DIM, family="Arial, Helvetica, sans-serif"), showlegend=False,
             xaxis=dict(gridcolor=BORDA), yaxis=dict(gridcolor=BORDA),
         )
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
@@ -774,14 +808,14 @@ def aba_farol(df_aloc):
             for m in meses
         )
         table = (
-            f'<table style="border-collapse:collapse;width:100%;font-family:sans-serif;">'
+            f'<table style="border-collapse:collapse;width:100%;font-family:Arial,Helvetica,sans-serif;">'
             f'<thead><tr>'
             f'<th style="width:{name_w}px;text-align:left;font-size:11px;color:{TEXTO_DIM2};'
             f'font-weight:600;padding:6px 8px;border-bottom:1px solid {BORDA};">{titulo}</th>'
             f'{header_cells}</tr></thead><tbody>'
         )
         for pi, pessoa in enumerate(pessoas_lista):
-            row_bg = "rgba(255,255,255,0.03)" if pi % 2 == 1 else "transparent"
+            row_bg = "rgba(8,176,238,0.05)" if pi % 2 == 1 else "transparent"
             row = f'<tr style="background:{row_bg};">'
             row += (f'<td style="padding:6px 8px;font-size:13px;font-weight:500;'
                     f'color:{TEXTO};white-space:nowrap;">{pessoa}</td>')
@@ -1012,8 +1046,8 @@ def aba_alocacao(df_gantt):
     st.markdown(
         f'<div style="margin-top:8px;padding:10px 14px;background:{BG_CARD};'
         f'border:1px solid {BORDA};border-radius:8px;">'
-        f'<span style="font-size:11px;font-weight:600;color:{TEXTO_DIM2};'
-        f'text-transform:uppercase;letter-spacing:.05em;">{titulo_leg}</span><br>'
+        f'<span style="font-size:13px;font-weight:700;color:{TEXTO_DIM2};'
+        f'font-family:Arial,Helvetica,sans-serif;text-transform:none;letter-spacing:0;">{titulo_leg}</span><br>'
         f'<div style="margin-top:6px;">{dots}</div></div>',
         unsafe_allow_html=True
     )
@@ -1181,7 +1215,8 @@ def aba_ferias():
     fig.update_xaxes(gridcolor=BORDA, title=None, dtick="M1", tickformat="%b/%y")
     fig.update_layout(
         height=90 + 34 * len(ordem), margin=dict(t=10, b=10, l=10, r=10),
-        paper_bgcolor=BG, plot_bgcolor=BG, font=dict(color=TEXTO_DIM),
+        paper_bgcolor=BG, plot_bgcolor=BG,
+        font=dict(color=TEXTO_DIM, family="Arial, Helvetica, sans-serif"),
         showlegend=False, bargap=0.35,
     )
 
@@ -1263,8 +1298,8 @@ def aba_eventos(df_ev):
         st.markdown(
             f'<div style="border-left:4px solid {AZUL_CLARO}; background:{BG_CARD}; '
             f'padding:10px 14px; border-radius:4px; margin-bottom:14px;">'
-            f'<span style="font-size:0.7rem; color:{TEXTO_DIM2}; '
-            f'text-transform:uppercase; letter-spacing:0.06em;">Próximo evento · '
+            f'<span style="font-size:13px; font-weight:700; color:{TEXTO_DIM2}; '
+            f'text-transform:none; letter-spacing:0;">Próximo evento · '
             f'{quando}</span><br>'
             f'<span style="font-size:0.95rem; color:{TEXTO}; font-weight:600;">'
             f'{_esc(p["evento"])}</span>'
@@ -1357,8 +1392,8 @@ def aba_monitorias(df_mon):
         st.markdown(
             f'<div style="border-left:4px solid {COR_COMUNICACAO}; '
             f'background:{BG_CARD}; padding:10px 14px; border-radius:4px; '
-            f'margin:4px 0 14px 0;"><span style="font-size:0.7rem; '
-            f'color:{TEXTO_DIM2}; text-transform:uppercase; letter-spacing:0.06em;">'
+            f'margin:4px 0 14px 0;"><span style="font-size:13px; font-weight:700; '
+            f'color:{TEXTO_DIM2}; text-transform:none; letter-spacing:0;">'
             f'Sessões com observação ({len(alerta)})</span>{itens}</div>',
             unsafe_allow_html=True)
 
@@ -1382,7 +1417,7 @@ def aba_monitorias(df_mon):
             cor_txt = TEXTO if v else TEXTO_DIM2
             cels += (f'<td style="padding:5px 8px; text-align:center; '
                      f'font-size:0.76rem; color:{cor_txt}; '
-                     f'background:rgba(80,144,211,{intensidade:.2f});">'
+                     f'background:rgba(8,176,238,{intensidade:.2f});">'
                      f'{v if v else "·"}</td>')
         corpo += (f'<tr><td style="padding:5px 10px; font-size:0.78rem; '
                   f'color:{TEXTO}; white-space:nowrap;">{_esc(m)}</td>{cels}'
