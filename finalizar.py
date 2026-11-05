@@ -27,7 +27,7 @@ import parser as P   # parser.py deste repositorio
 
 
 CANON = ["Bia B", "Bia S", "Caio", "Carol", "Cecilia", "Fabrícia", "Fred", "Hisrael",
-         "Julia", "Junior", "Lorena", "Luan", "Luigi", "Lycia", "Michel", "Samu"]
+         "Julia", "Lorena", "Luan", "Luigi", "Lycia", "Michel", "Samu"]
 NORM_PESSOA = {"Luiggi": "Luigi", "Zinho": "Michel", "Pleno": "Fred",
                "Senior": "Hisrael", "Sênior": "Hisrael", "Samuely": "Samu",
                "BiaS": "Bia S", "BiaB": "Bia B", "Júlia": "Julia", "Frederik": "Fred"}
@@ -47,6 +47,39 @@ CORRECOES_ETAPA = {
 # prazos digitados errado na origem: (projeto, atividade) -> data correta
 CORRECOES_PRAZO = {
     ("PRiME III", "Translate workbook to French"): dt.datetime(2027, 1, 22),  # vinha 207-01-22
+    # ciclo 05/11/2026: ano 2026 onde a sequencia da planilha indica 2027.
+    # As do ToT/Hands-on vem logo depois de 18/12/2026; o lancamento ES vem
+    # depois de 15/01/2027. Confirmado com o Caio em 05/11/2026.
+    ("PRiME III", 'Lançamento do Fundamentals (público do IFAD) -ES'):
+        dt.datetime(2027, 1, 24),
+    ("PRiME III", 'Compartilhar videos em FR (Bloco 1) com Aulasneo'):
+        dt.datetime(2027, 1, 4),
+    ("PRiME III", 'Obtain IFAD validation for the workbook and ToT material'):
+        dt.datetime(2027, 1, 15),
+    ("PRiME III", 'Prepare ToT material - v1'):
+        dt.datetime(2027, 1, 15),
+    ("PRiME III", 'Minor adjustments to the HoT material'):
+        dt.datetime(2027, 1, 22),
+    ("PRiME III", 'Revisar (incl ajustar) material para ToT - gerar v2'):
+        dt.datetime(2027, 1, 29),
+    ("PRiME III", 'Share HoT and ToT materials (English) with trainers for AA'):
+        dt.datetime(2027, 1, 29),
+    ("PRiME III", 'Schedule ToT with Matodzi'):
+        dt.datetime(2027, 1, 29),
+    ("PRiME III", 'Adapt case studies for each delivery'):
+        dt.datetime(2027, 1, 29),
+    ("PRiME III", 'Check case study adaptations'):
+        dt.datetime(2027, 2, 17),
+    ("PRiME III", 'Adjust case study adaptations'):
+        dt.datetime(2027, 2, 24),
+    ("PRiME III", 'Translate materials to Spanish'):
+        dt.datetime(2027, 3, 3),
+    ("PRiME III", 'Review materials in Spanish'):
+        dt.datetime(2027, 3, 10),
+    ("PRiME III", 'Translate materials to French'):
+        dt.datetime(2027, 3, 10),
+    ("PRiME III", 'Review materials in French'):
+        dt.datetime(2027, 3, 17),
 }
 
 
@@ -203,6 +236,34 @@ def escreve(name, df, pos=None):
     for rec in df.itertuples(index=False):
         w.append(["" if pd.isna(v) else v for v in rec])
 
+
+# ============================================================
+# 8) tira das abas manuais quem nao esta na equipe canonica
+#    ("Junior" era nivel de senioridade, nao pessoa: saiu em 05/11/2026)
+# ============================================================
+for _aba in ("Alocacao", "Envolvimento", "Pessoas"):
+    if _aba not in wb.sheetnames:
+        continue
+    _ws = wb[_aba]
+    _h = [c.value for c in _ws[1]]
+    if "pessoa" not in _h:
+        continue
+    _i = _h.index("pessoa") + 1
+    for _r in range(_ws.max_row, 1, -1):
+        _v = _ws.cell(_r, _i).value
+        if isinstance(_v, str) and _v.strip() and _v.strip() not in CANON:
+            print(f"  {_aba}: removendo {_v.strip()!r} (linha {_r})")
+            _ws.delete_rows(_r)
+
+g_new = g_new[g_new["pessoa"].isin(CANON)].reset_index(drop=True)
+ce_new = ce_new[ce_new["pessoa"].isin(CANON)].reset_index(drop=True)
+
+# README: lista da equipe
+_ws = wb["README"]
+for _row in _ws.iter_rows():
+    for _c in _row:
+        if isinstance(_c.value, str) and _c.value.count(",") >= 10 and "Caio" in _c.value:
+            _c.value = ", ".join(CANON)
 
 escreve("Alocacao_Gantt", g_new)
 escreve("Carga_Esperada", ce_new)

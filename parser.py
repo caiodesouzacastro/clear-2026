@@ -9,7 +9,7 @@ import openpyxl
 
 # --- Normalização de nomes (regras duras do CLEAR) ---
 TEAM = ["Bia B","Bia S","Caio","Carol","Cecilia","Fabrícia","Fred","Hisrael",
-        "Julia","Junior","Lorena","Luan","Luigi","Lycia","Michel","Samu"]
+        "Julia","Lorena","Luan","Luigi","Lycia","Michel","Samu"]
 
 # mapeia variantes -> canônico
 NAME_MAP = {
@@ -18,7 +18,6 @@ NAME_MAP = {
     "fabricia":"Fabrícia", "fabrícia":"Fabrícia",
     "cecília":"Cecilia", "cecilia":"Cecilia",
     "júlia":"Julia", "julia":"Julia",
-    "júnior":"Junior", "junior":"Junior",
     "bia":"Bia",  # ambíguo: tratado à parte abaixo
     "bia b":"Bia B", "bia s":"Bia S",
     "caraol":"Carol", "carol":"Carol",
@@ -67,8 +66,7 @@ def norm_one(raw):
 
 CANON = {"bia b":"Bia B","bia s":"Bia S","caio":"Caio","carol":"Carol",
          "cecilia":"Cecilia","cecília":"Cecilia","fabricia":"Fabrícia","fabrícia":"Fabrícia",
-         "fred":"Fred","hisrael":"Hisrael","julia":"Julia","júlia":"Julia","ju":"Julia",
-         "junior":"Junior","júnior":"Junior","lorena":"Lorena","luan":"Luan",
+         "fred":"Fred","hisrael":"Hisrael","julia":"Julia","júlia":"Julia","ju":"Julia","lorena":"Lorena","luan":"Luan",
          "luigi":"Luigi","luiggi":"Luigi","lycia":"Lycia","michel":"Michel","zinho":"Michel",
          "samu":"Samu", "samuely":"Samu", "samuely bezerra":"Samu","samy":"Samu","pleno":"Fred",
          "frederik":"Fred","frederik de jonghe":"Fred","senior":"Hisrael","sênior":"Hisrael",
@@ -97,7 +95,9 @@ EXTERNAL_KEEP = {"marcio":"Marcio","lara":"Lara","lia":"Lia","amanda":"Amanda","
                  "khalid":"Khalid","cenci":"Cenci",     # revisores externos do PRiME
                  "gabriel":"Gabriel W",              # "Gabriel W, Cenci e Thania" no mesmo cronograma
                  "amaninha":"Amanda"}
-_NOTE_DROP = {"dummy","confirmar","apoio","equipe","provavelmente nós","bia",
+# "Junior" era nivel de senioridade, nao pessoa (como Pleno e Senior).
+# Removido da equipe canonica em 05/11/2026 a pedido do Caio.
+_NOTE_DROP = {"dummy","confirmar","apoio","equipe","provavelmente nós","bia","junior","júnior",
               # placeholders de papel, nao pessoas (ciclo 12/10/2026)
               "a definir","tbd","mentores","consultant","junior person","participantes",
               "hands-on trainer","gestores","—","-"}

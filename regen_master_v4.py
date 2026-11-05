@@ -178,7 +178,7 @@ df_resp = pd.DataFrame(resp_rows)
 pessoas_old = pd.read_excel(OLD, sheet_name="Pessoas")["pessoa"].tolist()
 todas = set(pessoas_old) | set(df_resp["pessoa"])
 canon = ["Bia B","Bia S","Caio","Carol","Cecilia","Fabrícia","Fred","Hisrael",
-         "Julia","Junior","Lorena","Luan","Luigi","Lycia","Michel","Samu"]
+         "Julia","Lorena","Luan","Luigi","Lycia","Michel","Samu"]
 df_pessoas = pd.DataFrame({"pessoa": [p for p in canon if p in todas or p in pessoas_old]})
 
 # ---------- 6) Projetos ----------

@@ -99,8 +99,10 @@ MASTER_FILE = Path(__file__).parent / "CLEAR_Master_2026.xlsx"
 FERIAS_FILE = Path(__file__).parent / "Ferias_CLEAR_2026.xlsx"
 
 # Equipe canônica (16, com Fred e Hisrael pelos nomes reais)
+# "Junior" era nivel de senioridade, nao pessoa (como Pleno e Senior).
+# Saiu da equipe em 05/11/2026; a equipe canonica agora tem 15.
 EQUIPE = ["Bia B", "Bia S", "Caio", "Carol", "Cecilia", "Fabrícia", "Fred",
-          "Hisrael", "Julia", "Junior", "Lorena", "Luan", "Luigi", "Lycia",
+          "Hisrael", "Julia", "Lorena", "Luan", "Luigi", "Lycia",
           "Michel", "Samu"]
 
 # Paleta escura com as cores da identidade FGV CLEAR (navy2/navy, realce azul)
