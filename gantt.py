@@ -23,10 +23,30 @@ MESES = {
 
 
 def meses_do_texto(txt):
+    """Meses citados em texto livre, ancorados no ano quando ele aparece.
+
+    "Jan/2027", "janeiro '27" e "Abril de 2027" sao depois de 2026: viram 12,
+    como ja acontece com os prazos em formato de data. Sem fazer isso, um
+    lancamento de 2027 puxava o inicio da barra da pessoa para janeiro de 2026.
+    """
     if not isinstance(txt, str):
         return []
     t = txt.lower()
-    return [m for pref, m in MESES.items() if re.search(r"\b" + pref, t)]
+    meses = [m for pref, m in MESES.items() if re.search(r"\b" + pref, t)]
+    if not meses:
+        return []
+    # ano so quando esta escrito como ano de verdade: 2027, '27, jan/27.
+    # "15 e 22 de junho" nao tem ano nenhum: o 22 ali e dia, nao 2022.
+    anos = [int(a) for a in re.findall(r"\b(20\d{2})\b", t)]
+    anos += [2000 + int(a) for a in re.findall(r"['\u2019](\d{2})\b", t)]
+    anos += [2000 + int(a) for a in re.findall(
+        r"\b(?:" + "|".join(MESES) + r")[a-zç]*\s*[/-]\s*(\d{2})\b", t)]
+    if anos:
+        if max(anos) > 2026:
+            return [12]
+        if max(anos) < 2026:
+            return [1]
+    return meses
 
 
 def prime_frente(sub):

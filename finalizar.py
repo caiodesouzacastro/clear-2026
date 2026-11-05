@@ -37,6 +37,13 @@ STATUS_MAP = {"atrasado": "Atrasado", "pronto": "Concluído", "concluído": "Con
               "entregável": "Entregável", "reunião": "Reunião",
               "realizado parcialmente": "Em Andamento"}
 
+# etapas digitadas errado na origem: (projeto, sub_projeto errado) -> correto
+CORRECOES_ETAPA = {
+    # hifen faltando: criava uma segunda frente identica no painel (ciclo 05/11/2026)
+    ("PRiME III", "C2 (Course delivery) M1 (Fundamentals)"):
+        "C2 (Course delivery) - M1 (Fundamentals)",
+}
+
 # prazos digitados errado na origem: (projeto, atividade) -> data correta
 CORRECOES_PRAZO = {
     ("PRiME III", "Translate workbook to French"): dt.datetime(2027, 1, 22),  # vinha 207-01-22
@@ -61,7 +68,7 @@ ws = wb["Atividades"]
 hdr = [c.value for c in ws[1]]
 col = {n: hdr.index(n) + 1 for n in hdr if n}
 
-n_comp = n_pz = 0
+n_comp = n_pz = n_et = 0
 for r in range(2, ws.max_row + 1):
     raw = ws.cell(r, col["responsaveis_raw"]).value
     if isinstance(raw, str) and "Samu Michel" in raw:
@@ -74,6 +81,10 @@ for r in range(2, ws.max_row + 1):
     if chave in CORRECOES_PRAZO:
         ws.cell(r, col["prazo"]).value = CORRECOES_PRAZO[chave]
         n_pz += 1
+    ke = (ws.cell(r, col["projeto"]).value, str(ws.cell(r, col["sub_projeto"]).value or "").strip())
+    if ke in CORRECOES_ETAPA:
+        ws.cell(r, col["sub_projeto"]).value = CORRECOES_ETAPA[ke]
+        n_et += 1
 
 n_sic = n_st = 0
 for sh in ("Atividades", "Resp_Atividade"):
@@ -93,7 +104,7 @@ for sh in ("Atividades", "Resp_Atividade"):
                 c.value = STATUS_MAP[k]
                 n_st += 1
 wb.save(OUT)
-print(f"'Samu Michel': {n_comp} | prazos corrigidos: {n_pz} | Sicredi: {n_sic} | caixa status: {n_st}")
+print(f"'Samu Michel': {n_comp} | prazos corrigidos: {n_pz} | etapas corrigidas: {n_et} | Sicredi: {n_sic} | caixa status: {n_st}")
 
 # ============================================================
 # 5) Alocacao_Gantt
